@@ -45,6 +45,7 @@ export default function App() {
   const [shifts, setShifts] = useState(initial.shifts);
   const [page, setPage] = useState<Page>("home");
   const [month, setMonth] = useState(currentMonth());
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
   const [jobModal, setJobModal] = useState(false);
   const [shiftModal, setShiftModal] = useState(false);
@@ -72,6 +73,9 @@ export default function App() {
     overtimeTwo: sum.overtimeTwo + shift.overtimeTwo, overtimeTwoPay: sum.overtimeTwoPay + shift.overtimeTwo * shift.job.wage * shift.job.tierTwo,
   }), { income: 0, hours: 0, regular: 0, regularPay: 0, overtimeOne: 0, overtimeOnePay: 0, overtimeTwo: 0, overtimeTwoPay: 0 }), [monthly]);
   const jobTotals = jobs.map((job) => ({ ...job, value: monthly.filter((s) => s.jobId === job.id).reduce((sum, s) => sum + s.income, 0) })).filter((job) => job.value > 0);
+  const selectedDayShifts = selectedDate
+    ? calculated.filter((shift) => shift.date === selectedDate).sort((a, b) => a.start.localeCompare(b.start))
+    : [];
   let cursor = 0;
   const donut = totals.income ? jobTotals.map((job) => { const start = cursor; cursor += job.value / totals.income * 100; return `${job.color} ${start}% ${cursor}%`; }).join(",") : "#e8e0d3 0 100%";
   const [year, monthNumber] = month.split("-").map(Number);
@@ -105,7 +109,7 @@ export default function App() {
       return;
     }
     setShifts((list) => editingShift ? list.map((shift) => shift.id === editingShift ? next : shift) : [...list, next]);
-    setMonth(next.date.slice(0, 7)); setShiftModal(false); setPage("calendar"); setNotice(editingShift ? "班次已更新。" : "班次已儲存。");
+    setMonth(next.date.slice(0, 7)); setSelectedDate(next.date); setShiftModal(false); setPage("calendar"); setNotice(editingShift ? "班次已更新。" : "班次已儲存。");
   };
   const removeJob = (job: Job) => {
     if (shifts.some((shift) => shift.jobId === job.id)) { setNotice("這份工作仍有班次，請先刪除相關班次。"); return; }
@@ -149,10 +153,12 @@ export default function App() {
         </section>}
 
         {page === "calendar" && <section className="page-section">
-          <div className="section-heading"><div><small className="eyebrow text-[#ff7048]">每個班次，一眼掌握</small><h2>{monthLabel(month)}</h2></div><MonthPicker value={month} onChange={setMonth} /></div>
-          <div className="calendar"><div className="calendar-head">{"一 二 三 四 五 六 日".split(" ").map((day) => <span key={day}>{day}</span>)}</div><div className="calendar-grid">{Array.from({ length: offset }).map((_, index) => <i key={`e${index}`} />)}{Array.from({ length: dayCount }, (_, index) => index + 1).map((day) => { const date = `${month}-${String(day).padStart(2, "0")}`; const records = monthly.filter((s) => s.date === date); return <button key={day} onClick={() => openShift(date)}><b className={date === dateKey() ? "today" : ""}>{day}</b>{records.length > 0 && <><span className="dots">{records.slice(0, 3).map((s) => <i key={s.id} style={{ background: s.job.color }} />)}</span><small>{money(records.reduce((sum, s) => sum + s.income, 0))}</small></>}</button>; })}</div></div>
-          <div className="mt-7 flex items-center justify-between"><h3 className="font-display text-2xl font-bold">本月班次</h3><button onClick={() => openShift(`${month}-01`)} className="secondary-pill">+ 新增</button></div>
-          <div className="mt-3 space-y-3">{!monthly.length && <Empty compact title="這個月尚無班次" text="點選月曆日期即可新增。" />}{[...monthly].sort((a, b) => a.date.localeCompare(b.date) || a.start.localeCompare(b.start)).map((shift) => <article key={shift.id} className="shift-row"><i style={{ background: shift.job.color }} /><div><h4>{shift.job.name}</h4><p>{dateLabel(shift.date)} · {shift.start}–{shift.end} · 休息 {shift.breakMinutes} 分鐘</p>{shift.note && <p>{shift.note}</p>}</div><span><b>{money(shift.income)}</b>{shift.hours.toFixed(1)} 小時</span><div><button onClick={() => openShift(shift.date, shift)}>編輯</button><button className="danger" onClick={() => removeShift(shift)}>刪除</button></div></article>)}</div>
+          <div className="section-heading"><div><small className="eyebrow text-[#ff7048]">每個班次，一眼掌握</small><h2>{monthLabel(month)}</h2></div><MonthPicker value={month} onChange={(value) => { setMonth(value); setSelectedDate(null); }} /></div>
+          <div className="calendar"><div className="calendar-head">{"一 二 三 四 五 六 日".split(" ").map((day) => <span key={day}>{day}</span>)}</div><div className="calendar-grid">{Array.from({ length: offset }).map((_, index) => <i key={`e${index}`} />)}{Array.from({ length: dayCount }, (_, index) => index + 1).map((day) => { const date = `${month}-${String(day).padStart(2, "0")}`; const records = monthly.filter((s) => s.date === date); return <button key={day} className={date === selectedDate ? "selected" : ""} aria-pressed={date === selectedDate} onClick={() => setSelectedDate(date)}><b className={date === dateKey() ? "today" : ""}>{day}</b>{records.length > 0 && <><span className="dots">{records.slice(0, 3).map((s) => <i key={s.id} style={{ background: s.job.color }} />)}</span><small>{money(records.reduce((sum, s) => sum + s.income, 0))}</small></>}</button>; })}</div></div>
+          {selectedDate && <div className="mt-7">
+            <div className="flex items-center justify-between"><div><small className="eyebrow text-[#ff7048]">當日工作</small><h3 className="font-display text-2xl font-bold">{dateLabel(selectedDate)}</h3></div><button onClick={() => openShift(selectedDate)} className="secondary-pill">+ 新增班次</button></div>
+            <div className="mt-3 space-y-3">{!selectedDayShifts.length && <Empty compact title="當天尚無班次" text="可新增一筆班次，開始記錄當天工作。" action="+ 新增班次" onClick={() => openShift(selectedDate)} />}{selectedDayShifts.map((shift) => <article key={shift.id} className="shift-row selectable" role="button" tabIndex={0} onClick={() => openShift(shift.date, shift)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") openShift(shift.date, shift); }}><i style={{ background: shift.job.color }} /><div><h4>{shift.job.name}</h4><p>{shift.start}–{shift.end} · 休息 {shift.breakMinutes} 分鐘</p>{shift.note && <p>{shift.note}</p>}</div><span><b>{money(shift.income)}</b>{shift.hours.toFixed(1)} 小時</span><div><button onClick={(event) => { event.stopPropagation(); openShift(shift.date, shift); }}>編輯</button><button className="danger" onClick={(event) => { event.stopPropagation(); removeShift(shift); }}>刪除</button></div></article>)}</div>
+          </div>}
         </section>}
 
         {page === "jobs" && <section className="page-section">

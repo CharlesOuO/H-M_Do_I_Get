@@ -45,6 +45,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .calendar-grid > i, .calendar-grid > button { min-height: 6rem; border-right: 1px solid #e8e0d3; border-bottom: 1px solid #e8e0d3; padding: .5rem; text-align: left; }
 .calendar-grid > i { background: #faf5eb; }
 .calendar-grid > button:hover { background: #ffec6a; }
+.calendar-grid > button.selected { background: #ffec6a; box-shadow: inset 0 0 0 2px #171615; }
 .calendar-grid button > b { display: grid; width: 1.5rem; height: 1.5rem; place-items: center; border-radius: 999px; font: 700 12px "DM Mono", monospace; }
 .calendar-grid .today { background: #171615; color: white; }
 .calendar-grid button > small { display: block; margin-top: .25rem; font: 700 10px "DM Mono", monospace; }
@@ -52,6 +53,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .dots i { width: .625rem; height: .625rem; margin-right: -.1rem; border: 1px solid white; border-radius: 999px; }
 .shift-row, .job-row { display: grid; align-items: center; gap: 1rem; border: 1px solid #d7cebd; border-radius: 1rem; background: #fffaf0; padding: 1rem; }
 .shift-row { grid-template-columns: auto 1fr auto auto; }
+.shift-row.selectable { cursor: pointer; transition: transform .15s ease, box-shadow .15s ease; }
+.shift-row.selectable:hover, .shift-row.selectable:focus-visible { transform: translateY(-2px); box-shadow: 3px 3px 0 #171615; outline: none; }
 .job-row { grid-template-columns: auto 1fr auto auto auto; }
 .shift-row > i, .job-row > i { width: 2.5rem; height: 2.5rem; border-radius: .75rem; }
 .shift-row h4, .job-row h3 { font: 700 1.25rem "Fraunces", serif; }
