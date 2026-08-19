@@ -82,6 +82,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .field { display: block; font: 700 11px "DM Mono", monospace; }
 .field > input, .field > select, .field > textarea { box-sizing: border-box; width: 100%; margin-top: .375rem; border: 1px solid #cfc6b5; border-radius: .75rem; background: white; padding: .75rem; font: 400 14px "Archivo", sans-serif; }
 .field input[type="color"] { height: 2.75rem; padding: .25rem; }
+.time-hint { margin-top: -.5rem; color: #716c62; font: 400 10px "DM Mono", monospace; }
 .fatigue { display: flex; gap: .5rem; margin-top: .5rem; }
 .fatigue button { display: grid; width: 2.5rem; height: 2.5rem; place-items: center; border-radius: 999px; background: #f0e9dc; font-size: 1.125rem; }
 .fatigue button.active { background: #ffec6a; }
