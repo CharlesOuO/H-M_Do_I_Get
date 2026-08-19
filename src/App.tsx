@@ -83,6 +83,7 @@ export default function App() {
   const [shiftModal, setShiftModal] = useState(false);
   const [editingJob, setEditingJob] = useState<string | null>(null);
   const [editingShift, setEditingShift] = useState<string | null>(null);
+  const [resumeShiftAfterJob, setResumeShiftAfterJob] = useState(false);
   const importRef = useRef<HTMLInputElement>(null);
   const [jobForm, setJobForm] = useState({ name: "", wage: 0, tierOne: 1.34, tierTwo: 1.67, color: COLORS[0] });
   const [shiftForm, setShiftForm] = useState({ date: dateKey(), jobId: "", start: "09:00", end: "17:00", breakMinutes: 0, fatigue: 3, note: "", types: ["regular"] as ShiftType[] });
@@ -120,13 +121,20 @@ export default function App() {
   const dayCount = new Date(year, monthNumber, 0).getDate();
   const offset = (new Date(year, monthNumber - 1, 1).getDay() + 6) % 7;
 
-  const openJob = (job?: Job) => {
+  const openJob = (job?: Job, returnToShift = false) => {
     setEditingJob(job?.id ?? null);
     setJobForm(job ? { name: job.name, wage: job.wage, tierOne: job.tierOne, tierTwo: job.tierTwo, color: job.color } : { name: "", wage: 0, tierOne: 1.34, tierTwo: 1.67, color: COLORS[jobs.length % COLORS.length] });
+    setResumeShiftAfterJob(returnToShift);
+    if (returnToShift) setShiftModal(false);
     setJobModal(true);
   };
+  const closeJobModal = () => {
+    setJobModal(false);
+    if (resumeShiftAfterJob && jobs.length) setShiftModal(true);
+    setResumeShiftAfterJob(false);
+  };
   const openShift = (date = dateKey(), shift?: Shift) => {
-    if (!jobs.length) { setPage("jobs"); setNotice("請先新增一份工作，再記錄班次。"); openJob(); return; }
+    if (!jobs.length) { setNotice("請先新增一份工作，再記錄班次。"); openJob(undefined, true); return; }
     setEditingShift(shift?.id ?? null);
     setShiftForm(shift ? { date: shift.date, jobId: shift.jobId, start: shift.start, end: shift.end, breakMinutes: shift.breakMinutes, fatigue: shift.fatigue, note: shift.note, types: getShiftTypes(shift) } : { date, jobId: jobs[0].id, start: "09:00", end: "17:00", breakMinutes: 0, fatigue: 3, note: "", types: ["regular"] as ShiftType[] });
     setShiftModal(true);
@@ -146,8 +154,20 @@ export default function App() {
   const saveJob = (event: FormEvent) => {
     event.preventDefault(); const name = jobForm.name.trim();
     if (!name || jobForm.wage <= 0) { setNotice("請填寫工作名稱與正確時薪。"); return; }
-    setJobs((list) => editingJob ? list.map((job) => job.id === editingJob ? { ...job, ...jobForm, name } : job) : [...list, { id: makeId(), ...jobForm, name }]);
-    setJobModal(false); setNotice(editingJob ? "工作設定已更新。" : "工作已新增。");
+    if (editingJob) {
+      setJobs((list) => list.map((job) => job.id === editingJob ? { ...job, ...jobForm, name } : job));
+      setJobModal(false); setNotice("工作設定已更新。");
+      return;
+    }
+    const nextJob = { id: makeId(), ...jobForm, name };
+    setJobs((list) => [...list, nextJob]);
+    setJobModal(false);
+    if (resumeShiftAfterJob) {
+      setShiftForm((form) => ({ ...form, jobId: nextJob.id }));
+      setResumeShiftAfterJob(false);
+      setShiftModal(true);
+    }
+    setNotice("工作已新增。");
   };
   const saveShift = (event: FormEvent) => {
     event.preventDefault(); if (!shiftForm.date || !shiftForm.jobId) return;
@@ -222,8 +242,8 @@ export default function App() {
 
     {notice && <div role="status" className="toast">{notice}</div>}
     {selectedDate && <Modal eyebrow="當日工作" title={dateLabel(selectedDate)} onClose={() => setSelectedDate(null)}><div className="day-shift-panel"><button onClick={() => openShiftFromDay()} className="secondary-pill">+ 新增班次</button><div className="space-y-3">{!selectedDayShifts.length && <Empty compact title="當天尚無班次" text="可從上方新增一筆班次，開始記錄當天工作。" />}{selectedDayShifts.map((shift) => <article key={shift.id} className="shift-row day-shift-row selectable" role="button" tabIndex={0} onClick={() => openShiftFromDay(shift)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") openShiftFromDay(shift); }}><i style={{ background: shift.job.color }} /><div><h4>{shift.job.name}</h4><p>{shift.start}–{shift.end} · 休息 {shift.breakMinutes} 分鐘 · {shiftTypeLabel(shift)}</p>{shift.note && <p>{shift.note}</p>}</div><span><b>{money(shift.income)}</b>{shift.hours.toFixed(1)} 小時</span><div><button onClick={(event) => { event.stopPropagation(); openShiftFromDay(shift); }}>編輯</button><button className="danger" onClick={(event) => { event.stopPropagation(); removeShift(shift); }}>刪除</button></div></article>)}</div></div></Modal>}
-    {jobModal && <Modal title={editingJob ? "編輯工作" : "新增工作"} onClose={() => setJobModal(false)}><form onSubmit={saveJob} className="form-grid"><Field label="工作名稱"><input autoFocus value={jobForm.name} onChange={(e) => setJobForm({ ...jobForm, name: e.target.value })} placeholder="例如：咖啡店晚班" /></Field><Field label="基本時薪（新台幣）"><input type="number" min="1" value={jobForm.wage || ""} onChange={(e) => setJobForm({ ...jobForm, wage: Number(e.target.value) })} /></Field><div className="grid grid-cols-2 gap-3"><Field label="加班前 2 小時"><input type="number" min="1" step="0.01" value={jobForm.tierOne} onChange={(e) => setJobForm({ ...jobForm, tierOne: Number(e.target.value) })} /></Field><Field label="第 3 小時起"><input type="number" min="1" step="0.01" value={jobForm.tierTwo} onChange={(e) => setJobForm({ ...jobForm, tierTwo: Number(e.target.value) })} /></Field></div><Field label="識別顏色"><input type="color" value={jobForm.color} onChange={(e) => setJobForm({ ...jobForm, color: e.target.value })} /></Field><button className="form-submit">儲存工作 →</button></form></Modal>}
-    {shiftModal && <Modal eyebrow={editingShift ? "編輯班次" : "新增班次"} title={shiftJobName} onClose={() => setShiftModal(false)}><form onSubmit={saveShift} className="form-grid"><Field label="日期"><input type="date" value={shiftForm.date} onChange={(e) => setShiftForm({ ...shiftForm, date: e.target.value })} /></Field><Field label="工作"><select value={shiftForm.jobId} onChange={(e) => setShiftForm({ ...shiftForm, jobId: e.target.value })}>{jobs.map((job) => <option key={job.id} value={job.id}>{job.name}</option>)}</select></Field><Field label="班次類型（可複選）"><div className="shift-type" role="group" aria-label="班次類型"><button type="button" aria-label="一般班次" className={shiftForm.types.includes("regular") ? "active" : ""} aria-pressed={shiftForm.types.includes("regular")} onClick={() => toggleShiftType("regular")}>一般班次</button><button type="button" aria-label="加班班次" className={shiftForm.types.includes("overtime") ? "active" : ""} aria-pressed={shiftForm.types.includes("overtime")} onClick={() => toggleShiftType("overtime")}>加班班次</button></div></Field><div className="grid grid-cols-2 gap-3"><Field label="開始時間"><input type="text" inputMode="numeric" maxLength={5} autoComplete="off" value={shiftForm.start} onChange={(e) => setShiftForm((form) => ({ ...form, start: e.target.value }))} onBlur={() => { const value = normalizeTime(shiftForm.start); if (value) setShiftForm((form) => ({ ...form, start: value })); }} /></Field><Field label="結束時間"><input type="text" inputMode="numeric" maxLength={5} autoComplete="off" value={shiftForm.end} onChange={(e) => setShiftForm((form) => ({ ...form, end: e.target.value }))} onBlur={() => { const value = normalizeTime(shiftForm.end); if (value) setShiftForm((form) => ({ ...form, end: value })); }} /></Field></div><small className="time-hint">可輸入 20、2000 或 20:00，系統會自動轉成 24 小時制。</small><Field label="休息分鐘數"><input type="number" min="0" step="5" value={shiftForm.breakMinutes} onChange={(e) => setShiftForm({ ...shiftForm, breakMinutes: Number(e.target.value) })} /></Field><Field label="疲勞程度"><div className="fatigue">{[1, 2, 3, 4, 5].map((level) => <button type="button" key={level} onClick={() => setShiftForm({ ...shiftForm, fatigue: level })} className={shiftForm.fatigue >= level ? "active" : ""} aria-label={`疲勞程度 ${level}`}>✦</button>)}</div></Field><Field label="備註（選填）"><textarea rows={3} value={shiftForm.note} onChange={(e) => setShiftForm({ ...shiftForm, note: e.target.value })} placeholder="例如：代班" /></Field><button className="form-submit">儲存班次 →</button></form></Modal>}
+    {jobModal && <Modal title={editingJob ? "編輯工作" : "新增工作"} onClose={closeJobModal}><form onSubmit={saveJob} className="form-grid"><Field label="工作名稱"><input autoFocus value={jobForm.name} onChange={(e) => setJobForm({ ...jobForm, name: e.target.value })} placeholder="例如：咖啡店晚班" /></Field><Field label="基本時薪（新台幣）"><input type="number" min="1" value={jobForm.wage || ""} onChange={(e) => setJobForm({ ...jobForm, wage: Number(e.target.value) })} /></Field><div className="grid grid-cols-2 gap-3"><Field label="加班前 2 小時"><input type="number" min="1" step="0.01" value={jobForm.tierOne} onChange={(e) => setJobForm({ ...jobForm, tierOne: Number(e.target.value) })} /></Field><Field label="第 3 小時起"><input type="number" min="1" step="0.01" value={jobForm.tierTwo} onChange={(e) => setJobForm({ ...jobForm, tierTwo: Number(e.target.value) })} /></Field></div><Field label="識別顏色"><input type="color" value={jobForm.color} onChange={(e) => setJobForm({ ...jobForm, color: e.target.value })} /></Field><button className="form-submit">儲存工作 →</button></form></Modal>}
+    {shiftModal && <Modal eyebrow={editingShift ? "編輯班次" : "新增班次"} title={shiftJobName} onClose={() => setShiftModal(false)}><form onSubmit={saveShift} className="form-grid"><Field label="日期"><input type="date" value={shiftForm.date} onChange={(e) => setShiftForm({ ...shiftForm, date: e.target.value })} /></Field><Field label="工作"><div className="work-picker"><select value={shiftForm.jobId} onChange={(e) => setShiftForm({ ...shiftForm, jobId: e.target.value })}>{jobs.map((job) => <option key={job.id} value={job.id}>{job.name}</option>)}</select><button type="button" onClick={() => openJob(undefined, true)}>+ 新增工作</button></div></Field><Field label="班次類型（可複選）"><div className="shift-type" role="group" aria-label="班次類型"><button type="button" aria-label="一般班次" className={shiftForm.types.includes("regular") ? "active" : ""} aria-pressed={shiftForm.types.includes("regular")} onClick={() => toggleShiftType("regular")}>一般班次</button><button type="button" aria-label="加班班次" className={shiftForm.types.includes("overtime") ? "active" : ""} aria-pressed={shiftForm.types.includes("overtime")} onClick={() => toggleShiftType("overtime")}>加班班次</button></div></Field><div className="grid grid-cols-2 gap-3"><Field label="開始時間"><input type="text" inputMode="numeric" maxLength={5} autoComplete="off" value={shiftForm.start} onChange={(e) => setShiftForm((form) => ({ ...form, start: e.target.value }))} onBlur={() => { const value = normalizeTime(shiftForm.start); if (value) setShiftForm((form) => ({ ...form, start: value })); }} /></Field><Field label="結束時間"><input type="text" inputMode="numeric" maxLength={5} autoComplete="off" value={shiftForm.end} onChange={(e) => setShiftForm((form) => ({ ...form, end: e.target.value }))} onBlur={() => { const value = normalizeTime(shiftForm.end); if (value) setShiftForm((form) => ({ ...form, end: value })); }} /></Field></div><small className="time-hint">可輸入 20、2000 或 20:00，系統會自動轉成 24 小時制。</small><Field label="休息分鐘數"><input type="number" min="0" step="5" value={shiftForm.breakMinutes} onChange={(e) => setShiftForm({ ...shiftForm, breakMinutes: Number(e.target.value) })} /></Field><Field label="疲勞程度"><div className="fatigue">{[1, 2, 3, 4, 5].map((level) => <button type="button" key={level} onClick={() => setShiftForm({ ...shiftForm, fatigue: level })} className={shiftForm.fatigue >= level ? "active" : ""} aria-label={`疲勞程度 ${level}`}>✦</button>)}</div></Field><Field label="備註（選填）"><textarea rows={3} value={shiftForm.note} onChange={(e) => setShiftForm({ ...shiftForm, note: e.target.value })} placeholder="例如：代班" /></Field><button className="form-submit">儲存班次 →</button></form></Modal>}
   </main>;
 }
 
