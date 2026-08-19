@@ -1,0 +1,10 @@
+{
+  "name": "班次帳 — 工作帳本",
+  "short_name": "班次帳",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#fcf7ed",
+  "theme_color": "#171615",
+  "icons": []
+}

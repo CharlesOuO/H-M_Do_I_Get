@@ -1,0 +1,5 @@
+node_modules/
+dist/
+.make_extract/
+.DS_Store
+*.local

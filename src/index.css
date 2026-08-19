@@ -1,0 +1,9 @@
+@import url('https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..125,400..800&family=DM+Mono:wght@400;500&family=Fraunces:opsz,wght@9..144,500..700&display=swap');
+@import 'tailwindcss';
+
+:root { font-family: "Archivo", sans-serif; color: #171615; background: #fcf7ed; }
+.font-display { font-family: "Fraunces", serif; font-variation-settings: "opsz" 110; }
+.font-mono { font-family: "DM Mono", monospace; }
+button, select, input { cursor: pointer; }
+button:focus-visible, select:focus-visible, input:focus-visible { outline: 3px solid #ff7048; outline-offset: 2px; }
+::-webkit-scrollbar { width: 0; height: 0; }
