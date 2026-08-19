@@ -55,6 +55,11 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .shift-row { grid-template-columns: auto 1fr auto auto; }
 .shift-row.selectable { cursor: pointer; transition: transform .15s ease, box-shadow .15s ease; }
 .shift-row.selectable:hover, .shift-row.selectable:focus-visible { transform: translateY(-2px); box-shadow: 3px 3px 0 #171615; outline: none; }
+.day-shift-panel { display: grid; gap: 1rem; margin-top: 1.5rem; }
+.day-shift-panel > .secondary-pill { justify-self: end; }
+.day-shift-row { grid-template-columns: auto 1fr; }
+.day-shift-row > span { text-align: left; }
+.day-shift-row > div:last-child { grid-column: 1 / -1; }
 .job-row { grid-template-columns: auto 1fr auto auto auto; }
 .shift-row > i, .job-row > i { width: 2.5rem; height: 2.5rem; border-radius: .75rem; }
 .shift-row h4, .job-row h3 { font: 700 1.25rem "Fraunces", serif; }
