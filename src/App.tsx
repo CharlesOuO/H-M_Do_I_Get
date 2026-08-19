@@ -160,11 +160,11 @@ export default function App() {
     const conflict = shifts.find((shift) => shift.id !== editingShift && shiftsOverlap(next, shift));
     if (conflict) {
       const jobName = jobs.find((job) => job.id === conflict.jobId)?.name ?? "既有工作";
-      setNotice(`時間與「${jobName}」${dateLabel(conflict.date)} ${conflict.start}–${conflict.end} 的班次重疊，請先調整。`);
-      return;
+      const shouldSave = confirm(`此班次與「${jobName}」${dateLabel(conflict.date)} ${conflict.start}–${conflict.end} 的時間重疊。仍要儲存嗎？`);
+      if (!shouldSave) return;
     }
     setShifts((list) => editingShift ? list.map((shift) => shift.id === editingShift ? next : shift) : [...list, next]);
-    setMonth(next.date.slice(0, 7)); setSelectedDate(next.date); setShiftModal(false); setPage("calendar"); setNotice(editingShift ? "班次已更新。" : "班次已儲存。");
+    setMonth(next.date.slice(0, 7)); setSelectedDate(next.date); setShiftModal(false); setPage("calendar"); setNotice(conflict ? "班次已儲存，請留意時間重疊。" : editingShift ? "班次已更新。" : "班次已儲存。");
   };
   const removeJob = (job: Job) => {
     if (shifts.some((shift) => shift.jobId === job.id)) { setNotice("這份工作仍有班次，請先刪除相關班次。"); return; }
