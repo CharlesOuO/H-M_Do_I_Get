@@ -1,118 +1,161 @@
-import { useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 
-type Shift = {
-  id: number;
-  date: string;
-  job: string;
-  start: string;
-  end: string;
-  multiplier: number;
-  fatigue: number;
-  color: string;
+type Job = { id: string; name: string; wage: number; tierOne: number; tierTwo: number; color: string };
+type Shift = { id: string; date: string; jobId: string; start: string; end: string; breakMinutes: number; fatigue: number; note: string };
+type SavedData = { version: 1; jobs: Job[]; shifts: Shift[] };
+type Page = "home" | "calendar" | "jobs";
+
+const STORAGE_KEY = "shift-ledger-data-v1";
+const COLORS = ["#ff7048", "#7a6cf6", "#20a38a", "#f2a93b", "#3d8fd1", "#d95f9f"];
+const dateKey = (date = new Date()) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+const currentMonth = () => dateKey().slice(0, 7);
+const makeId = () => crypto.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
+const money = (value: number) => new Intl.NumberFormat("zh-TW", { style: "currency", currency: "TWD", maximumFractionDigits: 0 }).format(Math.round(value));
+const monthLabel = (value: string) => { const [y, m] = value.split("-"); return `${y} 年 ${Number(m)} 月`; };
+const dateLabel = (value: string) => new Intl.DateTimeFormat("zh-TW", { month: "long", day: "numeric", weekday: "short" }).format(new Date(`${value}T12:00:00`));
+const moveMonth = (value: string, amount: number) => { const [y, m] = value.split("-").map(Number); const d = new Date(y, m - 1 + amount, 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`; };
+const hoursBetween = (start: string, end: string, breakMinutes: number) => {
+  const [sh, sm] = start.split(":").map(Number); const [eh, em] = end.split(":").map(Number);
+  let minutes = eh * 60 + em - sh * 60 - sm; if (minutes < 0) minutes += 1440;
+  return Math.max(0, minutes - breakMinutes) / 60;
+};
+const loadData = (): SavedData => {
+  try { const value = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "null") as Partial<SavedData> | null; if (value?.version === 1 && Array.isArray(value.jobs) && Array.isArray(value.shifts)) return value as SavedData; } catch { /* start empty */ }
+  return { version: 1, jobs: [], shifts: [] };
 };
 
-type Job = { name: string; wage: number; tierOne: number; tierTwo: number; color: string };
-
-const initialJobs: Job[] = [
-  { name: "小燈咖啡館", wage: 185, tierOne: 1.34, tierTwo: 1.67, color: "#ff7048" },
-  { name: "海苔書店", wage: 170, tierOne: 1.34, tierTwo: 1.67, color: "#7a6cf6" },
-  { name: "十七號工作室", wage: 210, tierOne: 1.5, tierTwo: 2, color: "#20a38a" },
-];
-
-const initialShifts: Shift[] = [
-  { id: 1, date: "2025-04-02", job: "小燈咖啡館", start: "09:00", end: "17:30", multiplier: 1.34, fatigue: 3, color: "#ff7048" },
-  { id: 2, date: "2025-04-04", job: "海苔書店", start: "12:00", end: "20:00", multiplier: 1.34, fatigue: 2, color: "#7a6cf6" },
-  { id: 3, date: "2025-04-08", job: "小燈咖啡館", start: "10:00", end: "21:30", multiplier: 1.34, fatigue: 5, color: "#ff7048" },
-  { id: 4, date: "2025-04-11", job: "十七號工作室", start: "13:00", end: "19:00", multiplier: 1.5, fatigue: 2, color: "#20a38a" },
-  { id: 5, date: "2025-04-15", job: "小燈咖啡館", start: "08:00", end: "18:00", multiplier: 1.34, fatigue: 4, color: "#ff7048" },
-  { id: 6, date: "2025-04-18", job: "海苔書店", start: "11:30", end: "20:30", multiplier: 1.34, fatigue: 3, color: "#7a6cf6" },
-  { id: 7, date: "2025-04-22", job: "小燈咖啡館", start: "09:00", end: "22:00", multiplier: 1.67, fatigue: 5, color: "#ff7048" },
-  { id: 8, date: "2025-04-26", job: "十七號工作室", start: "10:00", end: "16:30", multiplier: 1.5, fatigue: 2, color: "#20a38a" },
-];
-
-const timeToHours = (start: string, end: string) => {
-  const [sh, sm] = start.split(":").map(Number);
-  const [eh, em] = end.split(":").map(Number);
-  let minutes = eh * 60 + em - (sh * 60 + sm);
-  if (minutes < 0) minutes += 24 * 60;
-  return minutes / 60;
-};
-
-const formatMoney = (n: number) => `¥${Math.round(n).toLocaleString("zh-TW")}`;
-
-function Logo() {
-  return <div className="grid size-10 place-items-center rounded-[14px] bg-[#111111] text-xl text-[#ffec6a] shadow-[3px_3px_0_#ff7048]">✦</div>;
+function MonthPicker({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  return <div className="month-picker"><button aria-label="上一個月" onClick={() => onChange(moveMonth(value, -1))}>‹</button><button onClick={() => onChange(currentMonth())}>{monthLabel(value)}</button><button aria-label="下一個月" onClick={() => onChange(moveMonth(value, 1))}>›</button></div>;
 }
 
 export default function App() {
-  const [active, setActive] = useState<"home" | "calendar" | "jobs">("home");
-  const [shifts, setShifts] = useState(initialShifts);
-  const [jobs, setJobs] = useState(initialJobs);
-  const [showModal, setShowModal] = useState(false);
-  const [selectedDate, setSelectedDate] = useState("2025-04-29");
-  const [form, setForm] = useState({ job: "小燈咖啡館", start: "09:00", end: "17:00", multiplier: "1.34", fatigue: 3 });
+  const initial = useMemo(loadData, []);
+  const [jobs, setJobs] = useState(initial.jobs);
+  const [shifts, setShifts] = useState(initial.shifts);
+  const [page, setPage] = useState<Page>("home");
+  const [month, setMonth] = useState(currentMonth());
+  const [notice, setNotice] = useState("");
+  const [jobModal, setJobModal] = useState(false);
+  const [shiftModal, setShiftModal] = useState(false);
+  const [editingJob, setEditingJob] = useState<string | null>(null);
+  const [editingShift, setEditingShift] = useState<string | null>(null);
+  const importRef = useRef<HTMLInputElement>(null);
+  const [jobForm, setJobForm] = useState({ name: "", wage: 0, tierOne: 1.34, tierTwo: 1.67, color: COLORS[0] });
+  const [shiftForm, setShiftForm] = useState({ date: dateKey(), jobId: "", start: "09:00", end: "17:00", breakMinutes: 0, fatigue: 3, note: "" });
 
-  const calculations = useMemo(() => shifts.map((shift) => {
-    const job = jobs.find((item) => item.name === shift.job) ?? jobs[0];
-    const hours = timeToHours(shift.start, shift.end);
-    const basic = Math.min(hours, 8);
-    const tier1 = Math.min(Math.max(hours - 8, 0), 2);
-    const tier2 = Math.max(hours - 10, 0);
-    const money = basic * job.wage + tier1 * job.wage * shift.multiplier + tier2 * job.wage * Math.max(shift.multiplier, job.tierTwo);
-    return { ...shift, hours, basic, tier1, tier2, money };
+  useEffect(() => localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: 1, jobs, shifts } satisfies SavedData)), [jobs, shifts]);
+  useEffect(() => { if (!notice) return; const timer = setTimeout(() => setNotice(""), 3500); return () => clearTimeout(timer); }, [notice]);
+
+  const calculated = useMemo(() => shifts.flatMap((shift) => {
+    const job = jobs.find((item) => item.id === shift.jobId); if (!job) return [];
+    const hours = hoursBetween(shift.start, shift.end, shift.breakMinutes);
+    const regular = Math.min(hours, 8), overtimeOne = Math.min(Math.max(hours - 8, 0), 2), overtimeTwo = Math.max(hours - 10, 0);
+    const income = regular * job.wage + overtimeOne * job.wage * job.tierOne + overtimeTwo * job.wage * job.tierTwo;
+    return [{ ...shift, job, hours, regular, overtimeOne, overtimeTwo, income }];
   }), [jobs, shifts]);
+  const monthly = useMemo(() => calculated.filter((shift) => shift.date.startsWith(month)), [calculated, month]);
+  const totals = useMemo(() => monthly.reduce((sum, shift) => ({
+    income: sum.income + shift.income, hours: sum.hours + shift.hours,
+    regular: sum.regular + shift.regular, regularPay: sum.regularPay + shift.regular * shift.job.wage,
+    overtimeOne: sum.overtimeOne + shift.overtimeOne, overtimeOnePay: sum.overtimeOnePay + shift.overtimeOne * shift.job.wage * shift.job.tierOne,
+    overtimeTwo: sum.overtimeTwo + shift.overtimeTwo, overtimeTwoPay: sum.overtimeTwoPay + shift.overtimeTwo * shift.job.wage * shift.job.tierTwo,
+  }), { income: 0, hours: 0, regular: 0, regularPay: 0, overtimeOne: 0, overtimeOnePay: 0, overtimeTwo: 0, overtimeTwoPay: 0 }), [monthly]);
+  const jobTotals = jobs.map((job) => ({ ...job, value: monthly.filter((s) => s.jobId === job.id).reduce((sum, s) => sum + s.income, 0) })).filter((job) => job.value > 0);
+  let cursor = 0;
+  const donut = totals.income ? jobTotals.map((job) => { const start = cursor; cursor += job.value / totals.income * 100; return `${job.color} ${start}% ${cursor}%`; }).join(",") : "#e8e0d3 0 100%";
+  const [year, monthNumber] = month.split("-").map(Number);
+  const dayCount = new Date(year, monthNumber, 0).getDate();
+  const offset = (new Date(year, monthNumber - 1, 1).getDay() + 6) % 7;
 
-  const totals = useMemo(() => calculations.reduce((acc, shift) => ({
-    income: acc.income + shift.money, basicHours: acc.basicHours + shift.basic, basicMoney: acc.basicMoney + shift.basic * (jobs.find(j => j.name === shift.job)?.wage ?? 0),
-    tier1Hours: acc.tier1Hours + shift.tier1, tier1Money: acc.tier1Money + shift.tier1 * (jobs.find(j => j.name === shift.job)?.wage ?? 0) * shift.multiplier,
-    tier2Hours: acc.tier2Hours + shift.tier2, tier2Money: acc.tier2Money + shift.tier2 * (jobs.find(j => j.name === shift.job)?.wage ?? 0) * Math.max(shift.multiplier, jobs.find(j => j.name === shift.job)?.tierTwo ?? 1),
-  }), { income: 0, basicHours: 0, basicMoney: 0, tier1Hours: 0, tier1Money: 0, tier2Hours: 0, tier2Money: 0 }), [calculations, jobs]);
-
-  const addShift = () => {
-    const job = jobs.find((item) => item.name === form.job)!;
-    setShifts((current) => [...current, { id: Date.now(), date: selectedDate, job: form.job, start: form.start, end: form.end, multiplier: Number(form.multiplier), fatigue: form.fatigue, color: job.color }]);
-    setShowModal(false);
-    setActive("calendar");
+  const openJob = (job?: Job) => {
+    setEditingJob(job?.id ?? null);
+    setJobForm(job ? { name: job.name, wage: job.wage, tierOne: job.tierOne, tierTwo: job.tierTwo, color: job.color } : { name: "", wage: 0, tierOne: 1.34, tierTwo: 1.67, color: COLORS[jobs.length % COLORS.length] });
+    setJobModal(true);
+  };
+  const openShift = (date = dateKey(), shift?: Shift) => {
+    if (!jobs.length) { setPage("jobs"); setNotice("請先新增一份工作，再記錄班次。"); openJob(); return; }
+    setEditingShift(shift?.id ?? null);
+    setShiftForm(shift ? { date: shift.date, jobId: shift.jobId, start: shift.start, end: shift.end, breakMinutes: shift.breakMinutes, fatigue: shift.fatigue, note: shift.note } : { date, jobId: jobs[0].id, start: "09:00", end: "17:00", breakMinutes: 0, fatigue: 3, note: "" });
+    setShiftModal(true);
+  };
+  const saveJob = (event: FormEvent) => {
+    event.preventDefault(); const name = jobForm.name.trim();
+    if (!name || jobForm.wage <= 0) { setNotice("請填寫工作名稱與正確時薪。"); return; }
+    setJobs((list) => editingJob ? list.map((job) => job.id === editingJob ? { ...job, ...jobForm, name } : job) : [...list, { id: makeId(), ...jobForm, name }]);
+    setJobModal(false); setNotice(editingJob ? "工作設定已更新。" : "工作已新增。");
+  };
+  const saveShift = (event: FormEvent) => {
+    event.preventDefault(); if (!shiftForm.date || !shiftForm.jobId) return;
+    const next = { id: editingShift ?? makeId(), ...shiftForm };
+    setShifts((list) => editingShift ? list.map((shift) => shift.id === editingShift ? next : shift) : [...list, next]);
+    setMonth(next.date.slice(0, 7)); setShiftModal(false); setPage("calendar"); setNotice(editingShift ? "班次已更新。" : "班次已儲存。");
+  };
+  const removeJob = (job: Job) => {
+    if (shifts.some((shift) => shift.jobId === job.id)) { setNotice("這份工作仍有班次，請先刪除相關班次。"); return; }
+    if (confirm(`確定刪除「${job.name}」？`)) setJobs((list) => list.filter((item) => item.id !== job.id));
+  };
+  const removeShift = (shift: Shift) => { if (confirm(`確定刪除 ${dateLabel(shift.date)} 的班次？`)) { setShifts((list) => list.filter((item) => item.id !== shift.id)); setNotice("班次已刪除。"); } };
+  const exportData = () => {
+    const url = URL.createObjectURL(new Blob([JSON.stringify({ version: 1, exportedAt: new Date().toISOString(), jobs, shifts }, null, 2)], { type: "application/json" }));
+    const link = document.createElement("a"); link.href = url; link.download = `班次帳備份-${dateKey()}.json`; link.click(); URL.revokeObjectURL(url);
+  };
+  const importData = async (file: File) => {
+    try {
+      const data = JSON.parse(await file.text()) as Partial<SavedData>;
+      if (data.version !== 1 || !Array.isArray(data.jobs) || !Array.isArray(data.shifts)) throw new Error();
+      if (confirm(`匯入 ${data.jobs.length} 份工作與 ${data.shifts.length} 筆班次，並取代目前資料？`)) { setJobs(data.jobs); setShifts(data.shifts); setNotice("備份匯入完成。"); }
+    } catch { setNotice("無法讀取備份，請確認檔案格式。"); }
+    if (importRef.current) importRef.current.value = "";
   };
 
-  const addJob = () => setJobs((current) => [...current, { name: `新兼職工作 ${current.length + 1}`, wage: 180, tierOne: 1.34, tierTwo: 1.67, color: "#f2a93b" }]);
+  return <main className="min-h-screen bg-[#fcf7ed] text-[#171615]">
+    <div className="mx-auto min-h-screen max-w-[1440px] px-4 py-4 sm:px-7 lg:px-10 lg:py-8">
+      <header className="flex items-center justify-between border-b-2 border-[#171615] pb-4 lg:pb-6">
+        <button onClick={() => setPage("home")} className="flex items-center gap-3 text-left"><span className="logo">✦</span><span><small className="eyebrow text-[#716c62]">你的工作帳本</small><strong className="font-display block text-xl">班次帳</strong></span></button>
+        <div className="flex items-center gap-3"><span className="hidden rounded-full border px-4 py-2 font-mono text-[11px] font-bold sm:block">⌁ 資料儲存於此裝置</span><button onClick={() => openShift()} className="primary-pill">+ 新增班次</button></div>
+      </header>
+      <div className="grid lg:grid-cols-[190px_1fr] lg:gap-10">
+        <nav className="flex gap-2 overflow-x-auto py-5 lg:flex-col lg:pt-10" aria-label="主要功能">
+          {[["home", "▣", "總覽"], ["calendar", "□", "月曆"], ["jobs", "♢", "我的工作"]].map(([id, icon, label]) => <button key={id} onClick={() => setPage(id as Page)} className={`nav-button ${page === id ? "active" : ""}`}><span>{icon}</span>{label}</button>)}
+          <div className="hidden border-t border-[#d8d0c2] pt-6 lg:block"><small className="eyebrow text-[#8b8479]">{monthLabel(month)}</small><p className="mt-2 font-display text-2xl font-bold">{monthly.length} 個班次</p><p className="font-mono text-xs text-[#716c62]">{totals.hours.toFixed(1)} 小時</p></div>
+        </nav>
 
-  const openDate = (day: number) => { setSelectedDate(`2025-04-${String(day).padStart(2, "0")}`); setShowModal(true); };
-  const days = Array.from({ length: 30 }, (_, i) => i + 1);
-  const startOffset = 2;
-  const jobTotals = jobs.map(job => ({ ...job, value: calculations.filter(s => s.job === job.name).reduce((sum, s) => sum + s.money, 0) }));
-  const donut = jobTotals.reduce((acc, item) => `${item.color} ${acc}% ${acc + (item.value / totals.income) * 100}%`, "");
-
-  return (
-    <main className="min-h-screen bg-[#fcf7ed] text-[#171615] selection:bg-[#ffec6a]">
-      <div className="mx-auto min-h-screen max-w-[1440px] px-4 py-4 sm:px-7 lg:px-10 lg:py-8">
-        <header className="flex items-center justify-between border-b-2 border-[#171615] pb-4 lg:pb-6">
-          <div className="flex items-center gap-3"><Logo /><div><p className="font-mono text-[10px] font-bold uppercase tracking-[.16em] text-[#716c62]">你的工作帳本</p><h1 className="font-display text-xl font-bold tracking-tight">班次帳</h1></div></div>
-          <div className="flex items-center gap-3"><button className="hidden rounded-full border border-[#171615] px-4 py-2 font-mono text-[11px] font-bold sm:block">⌁ 離線可用</button><button onClick={() => setShowModal(true)} className="rounded-full bg-[#ff7048] px-4 py-2.5 font-mono text-xs font-black shadow-[3px_3px_0_#171615] transition hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-none">+ 新增班次</button></div>
-        </header>
-
-        <div className="grid lg:grid-cols-[190px_1fr] lg:gap-10">
-          <nav className="flex gap-2 overflow-x-auto py-5 lg:flex-col lg:pt-10">
-            {[["home", "▣", "總覽"], ["calendar", "□", "月曆"], ["jobs", "♢", "我的工作"]].map(([id, icon, label]) => <button key={id} onClick={() => setActive(id as typeof active)} className={`flex shrink-0 items-center gap-3 rounded-full px-4 py-2.5 text-left font-mono text-xs font-bold transition lg:rounded-xl ${active === id ? "bg-[#171615] text-[#fffaf0]" : "hover:bg-[#f0e9dc]"}`}><span className="text-base">{icon}</span>{label}</button>)}
-            <div className="hidden border-t border-[#d8d0c2] pt-6 lg:block"><p className="font-mono text-[10px] font-bold uppercase tracking-widest text-[#8b8479]">2025 年 4 月</p><p className="mt-2 font-display text-2xl font-bold">12 個班次</p><p className="font-mono text-xs text-[#716c62]">83.5 小時</p></div>
-          </nav>
-
-          {active === "home" && <section className="py-3 lg:py-10">
-            <div className="mb-7 flex flex-wrap items-end justify-between gap-4"><div><p className="font-mono text-[11px] font-bold uppercase tracking-[.14em] text-[#ff7048]">收入儀表板 / 4 月 1–30 日</p><h2 className="mt-1 font-display text-4xl font-bold tracking-[-.05em] sm:text-5xl">每一分鐘，都值得計算。</h2></div><div className="flex rounded-full border border-[#cfc6b5] p-1 font-mono text-[11px] font-bold"><button className="rounded-full bg-[#ffec6a] px-3 py-2">本月</button><button className="px-3 py-2 text-[#716c62]">自訂</button></div></div>
+        {page === "home" && <section className="page-section">
+          <div className="section-heading"><div><small className="eyebrow text-[#ff7048]">收入總覽 / {monthLabel(month)}</small><h2>每一分鐘，都值得計算。</h2></div><MonthPicker value={month} onChange={setMonth} /></div>
+          {!jobs.length ? <Empty title="先建立你的第一份工作" text="填入工作名稱、時薪與加班倍率，接著就能記錄真實班次。這裡不會放入任何示範資料。" action="+ 新增工作" onClick={() => openJob()} /> : <>
             <div className="grid gap-4 xl:grid-cols-[1.1fr_.9fr]">
-              <div className="overflow-hidden rounded-[28px] bg-[#171615] p-6 text-[#fffaf0] shadow-[5px_5px_0_#ff7048] sm:p-8"><p className="font-mono text-[11px] font-bold uppercase tracking-[.16em] text-[#ffec6a]">本月總收入</p><div className="mt-5 flex items-end justify-between gap-3"><h3 className="font-display text-5xl font-bold tracking-[-.06em] sm:text-6xl">{formatMoney(totals.income)}</h3><span className="mb-2 rounded-full bg-[#20a38a] px-3 py-1 font-mono text-[10px] font-bold text-[#071c18]">↑ 14.2%</span></div><div className="mt-10 grid grid-cols-3 border-t border-white/20 pt-4 font-mono text-xs"><span><b className="block text-lg text-[#fffaf0]">{(totals.basicHours + totals.tier1Hours + totals.tier2Hours).toFixed(1)}</b>小時</span><span><b className="block text-lg text-[#fffaf0]">12</b>班次</span><span><b className="block text-lg text-[#fffaf0]">{formatMoney(totals.income / 12)}</b>平均每班</span></div></div>
-              <div className="rounded-[28px] border border-[#d7cebd] bg-[#fffaf0] p-6 sm:p-8"><div className="flex items-start justify-between"><div><p className="font-mono text-[11px] font-bold uppercase tracking-[.16em] text-[#716c62]">工作收入占比</p><p className="mt-1 text-sm text-[#716c62]">看看收入從哪裡來。</p></div><span className="text-xl">↗</span></div><div className="mt-7 flex items-center gap-6"><div className="grid size-32 shrink-0 place-items-center rounded-full" style={{ background: `conic-gradient(${donut})` }}><div className="grid size-20 place-items-center rounded-full bg-[#fffaf0] text-center font-mono text-[10px] font-bold leading-tight">3<br/>工作</div></div><div className="min-w-0 space-y-3">{jobTotals.map(job => <div key={job.name} className="flex items-center gap-2 font-mono text-[11px]"><span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: job.color }}></span><span className="min-w-0 flex-1 truncate">{job.name}</span><b>{Math.round(job.value / totals.income * 100)}%</b></div>)}</div></div></div>
+              <article className="income-card"><small className="eyebrow text-[#ffec6a]">本月總收入</small><p className="mt-5 font-display text-5xl font-bold tracking-[-.06em] sm:text-6xl">{money(totals.income)}</p><div className="income-stats"><span><b>{totals.hours.toFixed(1)}</b>小時</span><span><b>{monthly.length}</b>班次</span><span><b>{money(monthly.length ? totals.income / monthly.length : 0)}</b>平均每班</span></div></article>
+              <article className="paper-card"><small className="eyebrow text-[#716c62]">工作收入占比</small><p className="mt-1 text-sm text-[#716c62]">依這個月的實際班次計算。</p><div className="mt-7 flex items-center gap-6"><div className="donut" style={{ background: `conic-gradient(${donut})` }}><span>{jobTotals.length}<br />工作</span></div><div className="min-w-0 flex-1 space-y-3">{!jobTotals.length && <p className="text-sm text-[#716c62]">本月還沒有班次。</p>}{jobTotals.map((job) => <div key={job.id} className="flex gap-2 font-mono text-[11px]"><i style={{ background: job.color }} /><span className="flex-1 truncate">{job.name}</span><b>{Math.round(job.value / totals.income * 100)}%</b></div>)}</div></div></article>
             </div>
-            <div className="mt-8 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{[["All 小時", `${(totals.basicHours + totals.tier1Hours + totals.tier2Hours).toFixed(1)} h`, formatMoney(totals.income), "#171615"], ["Under 8 小時", `${totals.basicHours.toFixed(1)} h`, formatMoney(totals.basicMoney), "#ffec6a"], ["加班第 1 級", `${totals.tier1Hours.toFixed(1)} h`, formatMoney(totals.tier1Money), "#d9d4ff"], ["加班第 2 級", `${totals.tier2Hours.toFixed(1)} h`, formatMoney(totals.tier2Money), "#bceee1"]].map(([label, 小時, money, color]) => <article key={label} className="rounded-2xl border border-[#d7cebd] p-5" style={{ backgroundColor: color }}><p className="font-mono text-[10px] font-bold uppercase tracking-[.13em]">{label}</p><p className="mt-5 font-display text-3xl font-bold">{小時}</p><p className="font-mono text-xs">{money}</p></article>)}</div>
-          </section>}
+            <div className="mt-8 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{[["全部工時", totals.hours, totals.income, "#171615", "#fffaf0"], ["一般工時", totals.regular, totals.regularPay, "#ffec6a", "#171615"], ["加班前 2 小時", totals.overtimeOne, totals.overtimeOnePay, "#d9d4ff", "#171615"], ["加班第 3 小時起", totals.overtimeTwo, totals.overtimeTwoPay, "#bceee1", "#171615"]].map(([label, hours, pay, bg, color]) => <article key={String(label)} className="summary-card" style={{ background: String(bg), color: String(color) }}><small className="eyebrow">{label}</small><p className="mt-5 font-display text-3xl font-bold">{Number(hours).toFixed(1)} h</p><p className="font-mono text-xs">{money(Number(pay))}</p></article>)}</div>
+          </>}
+        </section>}
 
-          {active === "calendar" && <section className="py-3 lg:py-10"><div className="mb-7 flex items-end justify-between"><div><p className="font-mono text-[11px] font-bold uppercase tracking-[.14em] text-[#ff7048]">這個月，一眼掌握</p><h2 className="mt-1 font-display text-4xl font-bold tracking-[-.05em]">2025 年 4 月</h2></div><button className="rounded-full border border-[#171615] px-4 py-2 font-mono text-xs font-bold">‹  今天  ›</button></div><div className="overflow-hidden rounded-[24px] border border-[#d7cebd] bg-[#fffaf0]"><div className="grid grid-cols-7 border-b border-[#d7cebd]">{"一 二 三 四 五 六 日".split(" ").map(day => <div key={day} className="p-3 text-center font-mono text-[10px] font-bold tracking-widest text-[#716c62]">{day}</div>)}</div><div className="grid grid-cols-7">{Array.from({ length: startOffset }).map((_, i) => <div key={`empty-${i}`} className="min-h-24 border-b border-r border-[#e8e0d3] bg-[#faf5eb]" />)}{days.map(day => { const key = `2025-04-${String(day).padStart(2, "0")}`; const records = calculations.filter(s => s.date === key); const amount = records.reduce((sum, s) => sum + s.money, 0); return <button onClick={() => openDate(day)} key={day} className="group min-h-24 border-b border-r border-[#e8e0d3] p-2 text-left transition hover:bg-[#ffec6a] sm:p-3"><span className={`grid size-6 place-items-center rounded-full font-mono text-xs font-bold ${day === 29 ? "bg-[#171615] text-white" : ""}`}>{day}</span>{records.length > 0 && <div className="mt-3"><div className="flex -space-x-1">{records.slice(0, 3).map((r, i) => <span key={i} className="size-2.5 rounded-full border border-white" style={{ backgroundColor: r.color }} />)}</div><p className="mt-1 font-mono text-[10px] font-bold">{formatMoney(amount)}</p></div>}</button>})}</div></div><p className="mt-4 font-mono text-xs text-[#716c62]">點選任意日期即可新增班次。彩色圓點代表工作類型，金額已包含加班費。</p></section>}
+        {page === "calendar" && <section className="page-section">
+          <div className="section-heading"><div><small className="eyebrow text-[#ff7048]">每個班次，一眼掌握</small><h2>{monthLabel(month)}</h2></div><MonthPicker value={month} onChange={setMonth} /></div>
+          <div className="calendar"><div className="calendar-head">{"一 二 三 四 五 六 日".split(" ").map((day) => <span key={day}>{day}</span>)}</div><div className="calendar-grid">{Array.from({ length: offset }).map((_, index) => <i key={`e${index}`} />)}{Array.from({ length: dayCount }, (_, index) => index + 1).map((day) => { const date = `${month}-${String(day).padStart(2, "0")}`; const records = monthly.filter((s) => s.date === date); return <button key={day} onClick={() => openShift(date)}><b className={date === dateKey() ? "today" : ""}>{day}</b>{records.length > 0 && <><span className="dots">{records.slice(0, 3).map((s) => <i key={s.id} style={{ background: s.job.color }} />)}</span><small>{money(records.reduce((sum, s) => sum + s.income, 0))}</small></>}</button>; })}</div></div>
+          <div className="mt-7 flex items-center justify-between"><h3 className="font-display text-2xl font-bold">本月班次</h3><button onClick={() => openShift(`${month}-01`)} className="secondary-pill">+ 新增</button></div>
+          <div className="mt-3 space-y-3">{!monthly.length && <Empty compact title="這個月尚無班次" text="點選月曆日期即可新增。" />}{[...monthly].sort((a, b) => a.date.localeCompare(b.date) || a.start.localeCompare(b.start)).map((shift) => <article key={shift.id} className="shift-row"><i style={{ background: shift.job.color }} /><div><h4>{shift.job.name}</h4><p>{dateLabel(shift.date)} · {shift.start}–{shift.end} · 休息 {shift.breakMinutes} 分鐘</p>{shift.note && <p>{shift.note}</p>}</div><span><b>{money(shift.income)}</b>{shift.hours.toFixed(1)} 小時</span><div><button onClick={() => openShift(shift.date, shift)}>編輯</button><button className="danger" onClick={() => removeShift(shift)}>刪除</button></div></article>)}</div>
+        </section>}
 
-          {active === "jobs" && <section className="py-3 lg:py-10"><div className="mb-7 flex items-end justify-between"><div><p className="font-mono text-[11px] font-bold uppercase tracking-[.14em] text-[#ff7048]">你設定費率，我們精準計算</p><h2 className="mt-1 font-display text-4xl font-bold tracking-[-.05em]">我的工作</h2></div><button onClick={addJob} className="rounded-full bg-[#171615] px-4 py-2.5 font-mono text-xs font-bold text-white">+ 新增工作</button></div><div className="space-y-3">{jobs.map((job, index) => <article key={job.name} className="grid items-center gap-4 rounded-2xl border border-[#d7cebd] bg-[#fffaf0] p-5 sm:grid-cols-[auto_1fr_auto_auto_auto]"><span className="size-10 rounded-xl" style={{ backgroundColor: job.color }}></span><div><h3 className="font-display text-2xl font-bold">{job.name}</h3><p className="font-mono text-[11px] text-[#716c62]">使用中 · {calculations.filter(s => s.job === job.name).length} 個本月班次</p></div><div className="font-mono text-xs"><span className="block text-[#716c62]">基本時薪</span><b className="text-base">{formatMoney(job.wage)}</b></div><div className="font-mono text-xs"><span className="block text-[#716c62]">加班 A / B</span><b className="text-base">×{job.tierOne} / ×{job.tierTwo}</b></div><button onClick={() => setJobs(current => current.map((j, i) => i === index ? { ...j, wage: j.wage + 5 } : j))} className="rounded-full border border-[#171615] px-3 py-2 font-mono text-[10px] font-bold">編輯</button></article>)}</div><div className="mt-7 rounded-2xl border-2 border-dashed border-[#cfc6b5] p-5 sm:flex sm:items-center sm:justify-between"><div><p className="font-display text-xl font-bold">資料完全由你掌握。</p><p className="mt-1 text-sm text-[#716c62]">隨時匯出 JSON 備份，換裝置也不怕。</p></div><button className="mt-4 rounded-full bg-[#ffec6a] px-4 py-2.5 font-mono text-xs font-bold sm:mt-0">↓ 匯出備份</button></div></section>}
-        </div>
+        {page === "jobs" && <section className="page-section">
+          <div className="section-heading"><div><small className="eyebrow text-[#ff7048]">設定你的實際費率</small><h2>我的工作</h2></div><button onClick={() => openJob()} className="dark-pill">+ 新增工作</button></div>
+          <div className="space-y-3">{!jobs.length && <Empty compact title="尚未建立工作" text="新增後即可開始記錄班次。" />}{jobs.map((job) => <article key={job.id} className="job-row"><i style={{ background: job.color }} /><div><h3>{job.name}</h3><p>{shifts.filter((shift) => shift.jobId === job.id).length} 筆班次紀錄</p></div><span><small>基本時薪</small><b>{money(job.wage)}</b></span><span><small>加班倍率</small><b>×{job.tierOne} / ×{job.tierTwo}</b></span><div><button onClick={() => openJob(job)}>編輯</button><button className="danger" onClick={() => removeJob(job)}>刪除</button></div></article>)}</div>
+          <div className="backup-card"><div><h3>備份此裝置的資料</h3><p>匯出 JSON 後可在其他瀏覽器或裝置重新匯入。</p></div><div><input ref={importRef} type="file" accept=".json,application/json" hidden onChange={(event) => event.target.files?.[0] && importData(event.target.files[0])} /><button onClick={() => importRef.current?.click()} className="secondary-pill">↑ 匯入</button><button onClick={exportData} className="yellow-pill">↓ 匯出</button></div></div>
+        </section>}
       </div>
+    </div>
 
-      {showModal && <div className="fixed inset-0 z-20 grid place-items-end bg-[#171615]/50 p-0 backdrop-blur-sm sm:place-items-center sm:p-6"><div className="w-full max-w-lg rounded-t-[28px] bg-[#fffaf0] p-6 shadow-2xl sm:rounded-[28px]"><div className="flex items-start justify-between"><div><p className="font-mono text-[10px] font-bold uppercase tracking-[.14em] text-[#ff7048]">新增班次</p><h2 className="font-display text-3xl font-bold">{selectedDate.replace("2025-", "")}</h2></div><button onClick={() => setShowModal(false)} className="grid size-9 place-items-center rounded-full border border-[#171615] text-lg">×</button></div><div className="mt-6 grid gap-4"><label className="font-mono text-[11px] font-bold">選擇工作<select value={form.job} onChange={e => setForm({ ...form, job: e.target.value })} className="mt-1.5 w-full rounded-xl border border-[#cfc6b5] bg-white px-3 py-3 font-sans text-sm">{jobs.map(job => <option key={job.name}>{job.name}</option>)}</select></label><div className="grid grid-cols-2 gap-3"><label className="font-mono text-[11px] font-bold">開始時間<input type="time" value={form.start} onChange={e => setForm({ ...form, start: e.target.value })} className="mt-1.5 w-full rounded-xl border border-[#cfc6b5] bg-white px-3 py-3 font-sans text-sm" /></label><label className="font-mono text-[11px] font-bold">結束時間<input type="time" value={form.end} onChange={e => setForm({ ...form, end: e.target.value })} className="mt-1.5 w-full rounded-xl border border-[#cfc6b5] bg-white px-3 py-3 font-sans text-sm" /></label></div><label className="font-mono text-[11px] font-bold">當日加成倍率<input type="number" min="1" step="0.01" value={form.multiplier} onChange={e => setForm({ ...form, multiplier: e.target.value })} className="mt-1.5 w-full rounded-xl border border-[#cfc6b5] bg-white px-3 py-3 font-sans text-sm" /></label><div><p className="font-mono text-[11px] font-bold">疲勞程度</p><div className="mt-2 flex gap-2">{[1, 2, 3, 4, 5].map(n => <button key={n} onClick={() => setForm({ ...form, fatigue: n })} className={`grid size-10 place-items-center rounded-full text-lg ${form.fatigue >= n ? "bg-[#ffec6a]" : "bg-[#f0e9dc]"}`}>✦</button>)}</div></div><button onClick={addShift} className="mt-2 rounded-xl bg-[#ff7048] py-4 font-mono text-xs font-black shadow-[3px_3px_0_#171615]">儲存班次 →</button></div></div></div>}
-    </main>
-  );
+    {notice && <div role="status" className="toast">{notice}</div>}
+    {jobModal && <Modal title={editingJob ? "編輯工作" : "新增工作"} onClose={() => setJobModal(false)}><form onSubmit={saveJob} className="form-grid"><Field label="工作名稱"><input autoFocus value={jobForm.name} onChange={(e) => setJobForm({ ...jobForm, name: e.target.value })} placeholder="例如：咖啡店晚班" /></Field><Field label="基本時薪（新台幣）"><input type="number" min="1" value={jobForm.wage || ""} onChange={(e) => setJobForm({ ...jobForm, wage: Number(e.target.value) })} /></Field><div className="grid grid-cols-2 gap-3"><Field label="加班前 2 小時"><input type="number" min="1" step="0.01" value={jobForm.tierOne} onChange={(e) => setJobForm({ ...jobForm, tierOne: Number(e.target.value) })} /></Field><Field label="第 3 小時起"><input type="number" min="1" step="0.01" value={jobForm.tierTwo} onChange={(e) => setJobForm({ ...jobForm, tierTwo: Number(e.target.value) })} /></Field></div><Field label="識別顏色"><input type="color" value={jobForm.color} onChange={(e) => setJobForm({ ...jobForm, color: e.target.value })} /></Field><button className="form-submit">儲存工作 →</button></form></Modal>}
+    {shiftModal && <Modal title={editingShift ? "編輯班次" : "新增班次"} onClose={() => setShiftModal(false)}><form onSubmit={saveShift} className="form-grid"><Field label="日期"><input type="date" value={shiftForm.date} onChange={(e) => setShiftForm({ ...shiftForm, date: e.target.value })} /></Field><Field label="工作"><select value={shiftForm.jobId} onChange={(e) => setShiftForm({ ...shiftForm, jobId: e.target.value })}>{jobs.map((job) => <option key={job.id} value={job.id}>{job.name}</option>)}</select></Field><div className="grid grid-cols-2 gap-3"><Field label="開始時間"><input type="time" value={shiftForm.start} onChange={(e) => setShiftForm({ ...shiftForm, start: e.target.value })} /></Field><Field label="結束時間"><input type="time" value={shiftForm.end} onChange={(e) => setShiftForm({ ...shiftForm, end: e.target.value })} /></Field></div><Field label="休息分鐘數"><input type="number" min="0" step="5" value={shiftForm.breakMinutes} onChange={(e) => setShiftForm({ ...shiftForm, breakMinutes: Number(e.target.value) })} /></Field><Field label="疲勞程度"><div className="fatigue">{[1, 2, 3, 4, 5].map((level) => <button type="button" key={level} onClick={() => setShiftForm({ ...shiftForm, fatigue: level })} className={shiftForm.fatigue >= level ? "active" : ""} aria-label={`疲勞程度 ${level}`}>✦</button>)}</div></Field><Field label="備註（選填）"><textarea rows={3} value={shiftForm.note} onChange={(e) => setShiftForm({ ...shiftForm, note: e.target.value })} placeholder="例如：代班" /></Field><button className="form-submit">儲存班次 →</button></form></Modal>}
+  </main>;
 }
+
+function Empty({ title, text, action, onClick, compact = false }: { title: string; text: string; action?: string; onClick?: () => void; compact?: boolean }) {
+  return <div className={`empty ${compact ? "compact" : ""}`}><div><span>✦</span><h3>{title}</h3><p>{text}</p>{action && <button onClick={onClick}>{action}</button>}</div></div>;
+}
+function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+  return <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}><div className="modal-card"><header><div><small className="eyebrow text-[#ff7048]">資料設定</small><h2>{title}</h2></div><button onClick={onClose} aria-label="關閉">×</button></header>{children}</div></div>;
+}
+function Field({ label, children }: { label: string; children: React.ReactNode }) { return <label className="field"><span>{label}</span>{children}</label>; }
