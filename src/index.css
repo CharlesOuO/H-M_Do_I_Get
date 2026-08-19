@@ -80,6 +80,9 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .fatigue { display: flex; gap: .5rem; margin-top: .5rem; }
 .fatigue button { display: grid; width: 2.5rem; height: 2.5rem; place-items: center; border-radius: 999px; background: #f0e9dc; font-size: 1.125rem; }
 .fatigue button.active { background: #ffec6a; }
+.shift-type { display: grid; grid-template-columns: repeat(2, 1fr); gap: .5rem; margin-top: .5rem; }
+.shift-type button { border: 1px solid #cfc6b5; border-radius: .75rem; background: white; padding: .75rem; font: 700 12px "DM Mono", monospace; }
+.shift-type button.active { border-color: #171615; background: #ffec6a; box-shadow: 2px 2px 0 #171615; }
 .form-submit { margin-top: .5rem; border-radius: .75rem; background: #ff7048; padding: 1rem; font: 900 12px "DM Mono", monospace; box-shadow: 3px 3px 0 #171615; }
 
 @media (min-width: 640px) { .section-heading h2 { font-size: 3rem; } .income-card, .paper-card { padding: 2rem; } .modal-backdrop { place-items: center; padding: 1.5rem; } .modal-card { border-radius: 28px; } }
