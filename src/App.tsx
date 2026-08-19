@@ -19,6 +19,17 @@ const hoursBetween = (start: string, end: string, breakMinutes: number) => {
   let minutes = eh * 60 + em - sh * 60 - sm; if (minutes < 0) minutes += 1440;
   return Math.max(0, minutes - breakMinutes) / 60;
 };
+const shiftInterval = ({ date, start, end }: Pick<Shift, "date" | "start" | "end">) => {
+  const startsAt = new Date(`${date}T${start}:00`).getTime();
+  let endsAt = new Date(`${date}T${end}:00`).getTime();
+  if (endsAt < startsAt) endsAt += 24 * 60 * 60 * 1000;
+  return { startsAt, endsAt };
+};
+const shiftsOverlap = (left: Pick<Shift, "date" | "start" | "end">, right: Pick<Shift, "date" | "start" | "end">) => {
+  const leftInterval = shiftInterval(left);
+  const rightInterval = shiftInterval(right);
+  return leftInterval.startsAt < rightInterval.endsAt && rightInterval.startsAt < leftInterval.endsAt;
+};
 const loadData = (): SavedData => {
   try { const value = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "null") as Partial<SavedData> | null; if (value?.version === 1 && Array.isArray(value.jobs) && Array.isArray(value.shifts)) return value as SavedData; } catch { /* start empty */ }
   return { version: 1, jobs: [], shifts: [] };
@@ -87,6 +98,12 @@ export default function App() {
   const saveShift = (event: FormEvent) => {
     event.preventDefault(); if (!shiftForm.date || !shiftForm.jobId) return;
     const next = { id: editingShift ?? makeId(), ...shiftForm };
+    const conflict = shifts.find((shift) => shift.id !== editingShift && shiftsOverlap(next, shift));
+    if (conflict) {
+      const jobName = jobs.find((job) => job.id === conflict.jobId)?.name ?? "既有工作";
+      setNotice(`時間與「${jobName}」${dateLabel(conflict.date)} ${conflict.start}–${conflict.end} 的班次重疊，請先調整。`);
+      return;
+    }
     setShifts((list) => editingShift ? list.map((shift) => shift.id === editingShift ? next : shift) : [...list, next]);
     setMonth(next.date.slice(0, 7)); setShiftModal(false); setPage("calendar"); setNotice(editingShift ? "班次已更新。" : "班次已儲存。");
   };
@@ -112,7 +129,7 @@ export default function App() {
     <div className="mx-auto min-h-screen max-w-[1440px] px-4 py-4 sm:px-7 lg:px-10 lg:py-8">
       <header className="flex items-center justify-between border-b-2 border-[#171615] pb-4 lg:pb-6">
         <button onClick={() => setPage("home")} className="flex items-center gap-3 text-left"><span className="logo">✦</span><span><small className="eyebrow text-[#716c62]">你的工作帳本</small><strong className="font-display block text-xl">班次帳</strong></span></button>
-        <div className="flex items-center gap-3"><span className="hidden rounded-full border px-4 py-2 font-mono text-[11px] font-bold sm:block">⌁ 資料儲存於此裝置</span><button onClick={() => openShift()} className="primary-pill">+ 新增班次</button></div>
+        <button onClick={() => openShift()} className="primary-pill">+ 新增班次</button>
       </header>
       <div className="grid lg:grid-cols-[190px_1fr] lg:gap-10">
         <nav className="flex gap-2 overflow-x-auto py-5 lg:flex-col lg:pt-10" aria-label="主要功能">
