@@ -2,11 +2,11 @@
 @import 'tailwindcss';
 
 :root {
-  --blue: #8DA1B9;
-  --sage: #95AD86;
-  --mauve: #CBB3BF;
-  --sand: #DBC7BE;
-  --pink: #EF959C;
+  --blue: #B5C2D1;
+  --sage: #BCCBB4;
+  --mauve: #DDCED5;
+  --sand: #E9DDD7;
+  --pink: #F5BDC2;
   --ink: #26313a;
   --muted: #52625a;
   --paper: #f8f4f1;

@@ -7,7 +7,7 @@ type SavedData = { version: 1; jobs: Job[]; shifts: Shift[] };
 type Page = "home" | "calendar" | "jobs";
 
 const STORAGE_KEY = "shift-ledger-data-v1";
-const COLORS = ["#8DA1B9", "#95AD86", "#CBB3BF", "#DBC7BE", "#EF959C"];
+const COLORS = ["#B5C2D1", "#BCCBB4", "#DDCED5", "#E9DDD7", "#F5BDC2"];
 const dateKey = (date = new Date()) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 const currentMonth = () => dateKey().slice(0, 7);
 const makeId = () => crypto.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
@@ -116,7 +116,7 @@ export default function App() {
     : [];
   const shiftJobName = jobs.find((job) => job.id === shiftForm.jobId)?.name ?? "班次";
   let cursor = 0;
-  const donut = totals.income ? jobTotals.map((job) => { const start = cursor; cursor += job.value / totals.income * 100; return `${job.color} ${start}% ${cursor}%`; }).join(",") : "#DBC7BE 0 100%";
+  const donut = totals.income ? jobTotals.map((job) => { const start = cursor; cursor += job.value / totals.income * 100; return `${job.color} ${start}% ${cursor}%`; }).join(",") : "#E9DDD7 0 100%";
   const [year, monthNumber] = month.split("-").map(Number);
   const dayCount = new Date(year, monthNumber, 0).getDate();
   const offset = (new Date(year, monthNumber - 1, 1).getDay() + 6) % 7;
@@ -206,14 +206,14 @@ export default function App() {
 
   return <main className="min-h-screen bg-[#FCF7ED] text-[#26313a]">
     <div className="mx-auto min-h-screen max-w-[1440px] px-4 py-4 sm:px-7 lg:px-10 lg:py-8">
-      <header className="flex items-center justify-between border-b-2 border-[#8DA1B9] pb-4 lg:pb-6">
+      <header className="flex items-center justify-between border-b-2 border-[#B5C2D1] pb-4 lg:pb-6">
         <button onClick={() => setPage("home")} className="flex items-center gap-3 text-left"><span className="logo">✦</span><span><small className="eyebrow text-[#52625a]">你的工作帳本</small><strong className="font-display block text-xl">班次帳</strong></span></button>
         <button onClick={() => openShift()} className="primary-pill">+ 新增班次</button>
       </header>
       <div className="grid lg:grid-cols-[190px_1fr] lg:gap-10">
         <nav className="flex gap-2 overflow-x-auto py-5 lg:flex-col lg:pt-10" aria-label="主要功能">
           {[["home", "▣", "總覽"], ["calendar", "□", "月曆"], ["jobs", "♢", "我的工作"]].map(([id, icon, label]) => <button key={id} onClick={() => setPage(id as Page)} className={`nav-button ${page === id ? "active" : ""}`}><span>{icon}</span>{label}</button>)}
-          <div className="hidden border-t border-[#CBB3BF] pt-6 lg:block"><small className="eyebrow text-[#52625a]">{monthLabel(month)}</small><p className="mt-2 font-display text-2xl font-bold">{monthly.length} 個班次</p><p className="font-mono text-xs text-[#52625a]">{totals.hours.toFixed(1)} 小時</p></div>
+          <div className="hidden border-t border-[#DDCED5] pt-6 lg:block"><small className="eyebrow text-[#52625a]">{monthLabel(month)}</small><p className="mt-2 font-display text-2xl font-bold">{monthly.length} 個班次</p><p className="font-mono text-xs text-[#52625a]">{totals.hours.toFixed(1)} 小時</p></div>
         </nav>
 
         {page === "home" && <section className="page-section">
@@ -223,7 +223,7 @@ export default function App() {
               <article className="income-card"><small className="eyebrow text-[#26313a]">本月總收入</small><p className="mt-5 font-display text-5xl font-bold tracking-[-.06em] sm:text-6xl">{money(totals.income)}</p><div className="income-stats"><span><b>{totals.hours.toFixed(1)}</b>小時</span><span><b>{monthly.length}</b>班次</span><span><b>{money(monthly.length ? totals.income / monthly.length : 0)}</b>平均每班</span></div></article>
               <article className="paper-card"><small className="eyebrow text-[#52625a]">工作收入占比</small><p className="mt-1 text-sm text-[#52625a]">依這個月的實際班次計算。</p><div className="mt-7 flex items-center gap-6"><div className="donut" style={{ background: `conic-gradient(${donut})` }}><span>{jobTotals.length}<br />工作</span></div><div className="min-w-0 flex-1 space-y-3">{!jobTotals.length && <p className="text-sm text-[#52625a]">本月還沒有班次。</p>}{jobTotals.map((job) => <div key={job.id} className="flex gap-2 font-mono text-[11px]"><i style={{ background: job.color }} /><span className="flex-1 truncate">{job.name}</span><b>{Math.round(job.value / totals.income * 100)}%</b></div>)}</div></div></article>
             </div>
-            <div className="mt-8 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{[["全部工時", totals.hours, totals.income, "#8DA1B9", "#26313a"], ["一般工時", totals.regular, totals.regularPay, "#95AD86", "#26313a"], ["加班前 2 小時", totals.overtimeOne, totals.overtimeOnePay, "#CBB3BF", "#26313a"], ["加班第 3 小時起", totals.overtimeTwo, totals.overtimeTwoPay, "#EF959C", "#26313a"]].map(([label, hours, pay, bg, color]) => <article key={String(label)} className="summary-card" style={{ background: String(bg), color: String(color) }}><small className="eyebrow">{label}</small><p className="mt-5 font-display text-3xl font-bold">{Number(hours).toFixed(1)} h</p><p className="font-mono text-xs">{money(Number(pay))}</p></article>)}</div>
+            <div className="mt-8 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{[["全部工時", totals.hours, totals.income, "#B5C2D1", "#26313a"], ["一般工時", totals.regular, totals.regularPay, "#BCCBB4", "#26313a"], ["加班前 2 小時", totals.overtimeOne, totals.overtimeOnePay, "#DDCED5", "#26313a"], ["加班第 3 小時起", totals.overtimeTwo, totals.overtimeTwoPay, "#F5BDC2", "#26313a"]].map(([label, hours, pay, bg, color]) => <article key={String(label)} className="summary-card" style={{ background: String(bg), color: String(color) }}><small className="eyebrow">{label}</small><p className="mt-5 font-display text-3xl font-bold">{Number(hours).toFixed(1)} h</p><p className="font-mono text-xs">{money(Number(pay))}</p></article>)}</div>
           </>}
         </section>}
 
