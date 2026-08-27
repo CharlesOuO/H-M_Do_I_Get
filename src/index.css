@@ -2,12 +2,12 @@
 @import 'tailwindcss';
 
 :root {
-  --blue: #B5C2D1;
-  --sage: #BCCBB4;
+  --blue: #B4C1D0;
+  --sage: #BDCDBA;
   --mauve: #DDCED5;
   --sand: #E9DDD7;
-  --pink: #F5BDC2;
-  --ink: #26313a;
+  --pink: #DFC1C6;
+  --ink: #282C34;
   --muted: #52625a;
   --paper: #f8f4f1;
   font-family: "Archivo", sans-serif;
@@ -36,7 +36,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .month-picker button { min-width: 2.25rem; border-radius: 999px; padding: .5rem .65rem; }
 .month-picker button:nth-child(2) { min-width: 7rem; }
 .month-picker button:hover { background: var(--sage); }
-.income-card { overflow: hidden; border-radius: 28px; background: var(--blue); padding: 1.5rem; color: var(--ink); box-shadow: 5px 5px 0 var(--pink); }
+.income-card { overflow: hidden; border-radius: 28px; background: var(--blue); padding: 1.5rem; color: var(--ink); box-shadow: 0 10px 15px rgba(40, 44, 52, .15); }
 .income-stats { display: grid; grid-template-columns: repeat(3, 1fr); margin-top: 2.5rem; border-top: 1px solid #ffffff33; padding-top: 1rem; font: 400 12px "DM Mono", monospace; }
 .income-stats b { display: block; color: var(--ink); font-size: 1rem; }
 .paper-card { border: 1px solid var(--mauve); border-radius: 28px; background: var(--paper); padding: 1.5rem; }
@@ -85,7 +85,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .backup-card h3 { font: 700 1.25rem "Fraunces", serif; }
 .backup-card > div:last-child { display: flex; gap: .5rem; }
 .toast { position: fixed; z-index: 60; bottom: 1.25rem; left: 50%; transform: translateX(-50%); border-radius: 999px; background: var(--blue); padding: .75rem 1.25rem; color: var(--ink); box-shadow: 0 12px 30px #0003; font: 700 12px "DM Mono", monospace; }
-.modal-backdrop { position: fixed; inset: 0; z-index: 50; display: grid; place-items: end; background: #26313a85; backdrop-filter: blur(5px); }
+.modal-backdrop { position: fixed; inset: 0; z-index: 50; display: grid; place-items: end; background: #282c3485; backdrop-filter: blur(5px); }
 .modal-card { width: 100%; max-width: 34rem; max-height: 92vh; overflow-y: auto; border-radius: 28px 28px 0 0; background: var(--paper); padding: 1.5rem; box-shadow: 0 24px 80px #0004; }
 .modal-card > header { display: flex; align-items: start; justify-content: space-between; }
 .modal-card h2 { font: 700 1.875rem "Fraunces", serif; }
