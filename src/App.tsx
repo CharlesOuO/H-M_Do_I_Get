@@ -232,8 +232,15 @@ export default function App() {
     setNotice(conflicts.length ? `${createdText} 請留意時間重疊。` : createdText);
   };
   const removeJob = (job: Job) => {
-    if (shifts.some((shift) => shift.jobId === job.id)) { setNotice("這份工作仍有班次，請先刪除相關班次。"); return; }
-    if (confirm(`確定刪除「${job.name}」？`)) setJobs((list) => list.filter((item) => item.id !== job.id));
+    const relatedShiftCount = shifts.filter((shift) => shift.jobId === job.id).length;
+    const message = relatedShiftCount
+      ? `確定刪除「${job.name}」及行事曆中的 ${relatedShiftCount} 筆班次？此操作無法復原。`
+      : `確定刪除「${job.name}」？此操作無法復原。`;
+    if (!confirm(message)) return;
+    setJobs((list) => list.filter((item) => item.id !== job.id));
+    setShifts((list) => list.filter((shift) => shift.jobId !== job.id));
+    setSelectedDate(null);
+    setNotice(relatedShiftCount ? `工作與 ${relatedShiftCount} 筆班次已刪除。` : "工作已刪除。");
   };
   const removeShift = (shift: Shift) => { if (confirm(`確定刪除 ${dateLabel(shift.date)} 的班次？`)) { setShifts((list) => list.filter((item) => item.id !== shift.id)); setNotice("班次已刪除。"); } };
   const exportData = () => {
