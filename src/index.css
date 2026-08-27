@@ -12,7 +12,7 @@
   --paper: #f8f4f1;
   font-family: "Archivo", sans-serif;
   color: var(--ink);
-  background: var(--sand);
+  background: #FCF7ED;
 }
 body { margin: 0; min-width: 320px; }
 button, input, select { cursor: pointer; }

@@ -204,7 +204,7 @@ export default function App() {
     if (importRef.current) importRef.current.value = "";
   };
 
-  return <main className="min-h-screen bg-[#DBC7BE] text-[#26313a]">
+  return <main className="min-h-screen bg-[#FCF7ED] text-[#26313a]">
     <div className="mx-auto min-h-screen max-w-[1440px] px-4 py-4 sm:px-7 lg:px-10 lg:py-8">
       <header className="flex items-center justify-between border-b-2 border-[#8DA1B9] pb-4 lg:pb-6">
         <button onClick={() => setPage("home")} className="flex items-center gap-3 text-left"><span className="logo">✦</span><span><small className="eyebrow text-[#52625a]">你的工作帳本</small><strong className="font-display block text-xl">班次帳</strong></span></button>
