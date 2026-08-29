@@ -96,6 +96,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .modal-card h2 { font: 700 1.875rem "Fraunces", serif; }
 .modal-card > header > button { display: grid; width: 2.25rem; height: 2.25rem; place-items: center; border: 1px solid var(--blue); border-radius: 999px; font-size: 1.125rem; }
 .form-grid { display: grid; gap: 1rem; margin-top: 1.5rem; }
+.job-settings-form { gap: 1.25rem; }
 .field { display: block; font: 700 11px "DM Mono", monospace; }
 .field > input, .field > select, .field > textarea { box-sizing: border-box; width: 100%; margin-top: .375rem; border: 1px solid var(--mauve); border-radius: .75rem; background: white; padding: .75rem; font: 400 14px "Archivo", sans-serif; }
 .field input[type="color"] { height: 2.75rem; padding: .25rem; }
@@ -127,9 +128,28 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .interval-field { display: flex; align-items: center; gap: .5rem; margin-top: .4rem; font: 700 12px "DM Mono", monospace; }
 .interval-field input { width: 5rem; border: 1px solid var(--mauve); border-radius: .65rem; background: white; padding: .6rem; text-align: center; }
 .form-submit { margin-top: .5rem; border-radius: .75rem; background: var(--pink); padding: 1rem; font: 900 12px "DM Mono", monospace; box-shadow: 3px 3px 0 var(--ink); }
+.setting-section { overflow: hidden; border: 1px solid var(--mauve); border-radius: 1.15rem; background: white; }
+.setting-section > header { display: flex; gap: .8rem; border-bottom: 1px solid var(--sand); background: color-mix(in srgb, var(--blue) 16%, white); padding: .9rem 1rem; }
+.setting-section > header > span { display: grid; width: 1.8rem; height: 1.8rem; flex: 0 0 auto; place-items: center; border-radius: 999px; background: var(--blue); font: 700 11px "DM Mono", monospace; }
+.setting-section h3 { font: 700 1.05rem "Fraunces", serif; }
+.setting-section header p { margin-top: .2rem; color: var(--muted); font-size: 10px; }
+.setting-section-body { display: grid; gap: 1rem; padding: 1rem; }
+.setting-section-body > small, .setting-subsection > small { color: var(--muted); font: 400 10px/1.5 "DM Mono", monospace; }
+.setting-subsection { display: grid; gap: .75rem; border-radius: .85rem; background: var(--paper); padding: .85rem; }
+.setting-subsection > strong { font: 700 12px "DM Mono", monospace; }
+.input-suffix { display: flex; align-items: center; gap: .65rem; margin-top: .375rem; }
+.input-suffix input { box-sizing: border-box; min-width: 0; width: 100%; border: 1px solid var(--mauve); border-radius: .75rem; background: white; padding: .75rem; font: 400 14px "Archivo", sans-serif; }
+.input-suffix span { color: var(--muted); font: 700 11px "DM Mono", monospace; }
+.choice-cards { display: grid; grid-template-columns: repeat(2, 1fr); gap: .6rem; }
+.choice-cards button { display: grid; gap: .25rem; border: 1px solid var(--mauve); border-radius: .8rem; background: white; padding: .8rem; text-align: left; }
+.choice-cards button b { font: 700 12px "DM Mono", monospace; }
+.choice-cards button small { color: var(--muted); font-size: 10px; }
+.choice-cards button.active { border-color: var(--blue); background: var(--sage); box-shadow: 2px 2px 0 var(--blue); }
+.job-form-footer { display: grid; grid-template-columns: 7rem 1fr; align-items: end; gap: 1rem; }
+.job-form-footer .form-submit { margin: 0; }
 
 @media (min-width: 640px) { .section-heading h2 { font-size: 3rem; } .income-card, .paper-card { padding: 2rem; } .modal-backdrop { place-items: center; padding: 1.5rem; } .modal-card { border-radius: 28px; } }
 @media (min-width: 1024px) { .nav-button { border-radius: .75rem; } .page-section { padding-top: 2.5rem; } }
 @media (max-width: 720px) { .shift-row, .job-row { grid-template-columns: auto 1fr; } .shift-row > span, .job-row > span { text-align: left; } .shift-row > div:last-child, .job-row > div:last-child { grid-column: 1 / -1; } .backup-card { align-items: stretch; flex-direction: column; } }
-@media (max-width: 480px) { .calendar-grid > i, .calendar-grid > button { min-height: 4.75rem; padding: .35rem; } .calendar-grid button > small { font-size: 8px; } .income-stats { gap: .5rem; } .repeat-mode { grid-template-columns: 1fr; } }
+@media (max-width: 480px) { .calendar-grid > i, .calendar-grid > button { min-height: 4.75rem; padding: .35rem; } .calendar-grid button > small { font-size: 8px; } .income-stats { gap: .5rem; } .repeat-mode, .choice-cards { grid-template-columns: 1fr; } .job-form-footer { grid-template-columns: 1fr; } }
 ::-webkit-scrollbar { width: 0; height: 0; }
