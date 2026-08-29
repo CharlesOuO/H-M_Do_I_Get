@@ -36,6 +36,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .month-picker button { min-width: 2.25rem; border-radius: 999px; padding: .5rem .65rem; }
 .month-picker button:nth-child(2) { min-width: 7rem; }
 .month-picker button:hover { background: var(--sage); }
+.picker-label { display: block; margin: 0 0 .35rem .75rem; color: var(--muted); font: 700 10px "DM Mono", monospace; }
 .income-card { overflow: hidden; border-radius: 28px; background: var(--blue); padding: 1.5rem; color: var(--ink); box-shadow: 0 10px 15px rgba(40, 44, 52, .15); }
 .income-stats { display: grid; grid-template-columns: repeat(3, 1fr); margin-top: 2.5rem; border-top: 1px solid #ffffff33; padding-top: 1rem; font: 400 12px "DM Mono", monospace; }
 .income-stats b { display: block; color: var(--ink); font-size: 1rem; }
@@ -43,6 +44,10 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .donut { display: grid; width: 8rem; height: 8rem; flex-shrink: 0; place-items: center; border-radius: 999px; }
 .donut span { display: grid; width: 5rem; height: 5rem; place-items: center; border-radius: 999px; background: var(--paper); text-align: center; font: 700 10px/1.25 "DM Mono", monospace; }
 .paper-card i { width: .625rem; height: .625rem; flex-shrink: 0; border-radius: 999px; }
+.pay-period-list { display: grid; gap: .7rem; margin-top: 1rem; }
+.pay-period-list > div { border-left: 4px solid var(--sage); border-radius: .5rem; background: #fff8; padding: .65rem .8rem; }
+.pay-period-list strong { font: 700 12px "DM Mono", monospace; }
+.pay-period-list p { margin-top: .25rem; color: var(--muted); font: 400 11px/1.55 "DM Mono", monospace; }
 .summary-card { border: 1px solid var(--mauve); border-radius: 1rem; padding: 1.25rem; }
 .empty { display: grid; min-height: 20rem; place-items: center; border: 2px dashed var(--blue); border-radius: 28px; background: var(--paper); padding: 2rem; text-align: center; }
 .empty.compact { min-height: 0; border-radius: 1rem; padding: 2rem; }
@@ -108,6 +113,11 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .schedule-defaults > strong, .repeat-panel > strong { font: 700 14px "Fraunces", serif; }
 .schedule-defaults > p { margin-top: -.5rem; color: var(--muted); font-size: 11px; }
 .schedule-defaults > small, .repeat-panel small { color: var(--muted); font: 400 10px "DM Mono", monospace; }
+.hour-allocation { display: grid; gap: .75rem; border: 2px solid var(--sage); border-radius: 1rem; background: color-mix(in srgb, var(--sage) 25%, white); padding: 1rem; }
+.hour-allocation > div:first-child { display: flex; align-items: baseline; justify-content: space-between; gap: .75rem; }
+.hour-allocation strong { font: 700 14px "Fraunces", serif; }
+.hour-allocation small { color: var(--muted); font: 400 10px "DM Mono", monospace; text-align: right; }
+.hour-allocation button { justify-self: start; border: 1px solid var(--blue); border-radius: 999px; background: white; padding: .5rem .75rem; font: 700 10px "DM Mono", monospace; }
 .repeat-mode { display: grid; grid-template-columns: repeat(3, 1fr); gap: .5rem; }
 .repeat-mode button { border: 1px solid var(--mauve); border-radius: .75rem; background: white; padding: .65rem .4rem; font: 700 10px "DM Mono", monospace; }
 .repeat-mode button.active { border-color: var(--blue); background: var(--sage); box-shadow: 2px 2px 0 var(--blue); }

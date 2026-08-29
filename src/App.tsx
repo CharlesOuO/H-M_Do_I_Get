@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 
-type Job = { id: string; name: string; wage: number; regularHours?: number; tierOneHours?: number; tierOne: number; tierTwo: number; color: string; defaultStart?: string; defaultEnd?: string; defaultBreakMinutes?: number };
-type Shift = { id: string; date: string; jobId: string; start: string; end: string; breakMinutes: number; fatigue: number; note: string; types?: string[]; isOvertime?: boolean };
+type Job = { id: string; name: string; wage: number; regularHours?: number; tierOneHours?: number; tierOne: number; tierTwo: number; color: string; defaultStart?: string; defaultEnd?: string; defaultBreakMinutes?: number; payDay?: number; regularCutoffDay?: number; overtimeCutoffDay?: number };
+type Shift = { id: string; date: string; jobId: string; start: string; end: string; breakMinutes: number; fatigue: number; note: string; regularHours?: number; overtimeHours?: number; types?: string[]; isOvertime?: boolean };
 type RepeatMode = "none" | "weekly" | "interval";
 type SavedData = { version: 1; jobs: Job[]; shifts: Shift[] };
 type Page = "home" | "calendar" | "jobs";
@@ -18,6 +18,9 @@ const dateLabel = (value: string) => new Intl.DateTimeFormat("zh-TW", { month: "
 const moveMonth = (value: string, amount: number) => { const [y, m] = value.split("-").map(Number); const d = new Date(y, m - 1 + amount, 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`; };
 const addDays = (value: string, amount: number) => { const date = new Date(`${value}T12:00:00`); date.setDate(date.getDate() + amount); return dateKey(date); };
 const monthEnd = (value: string) => { const [y, m] = value.split("-").map(Number); return dateKey(new Date(y, m, 0)); };
+const dateAtDay = (month: string, day: number) => { const [y, m] = month.split("-").map(Number); return dateKey(new Date(y, m - 1, Math.min(Math.max(1, day), new Date(y, m, 0).getDate()))); };
+const payPeriod = (month: string, cutoffDay: number) => ({ start: addDays(dateAtDay(moveMonth(month, -1), cutoffDay), 1), end: dateAtDay(month, cutoffDay) });
+const inPeriod = (date: string, period: { start: string; end: string }) => date >= period.start && date <= period.end;
 const weekdayLabels = ["日", "一", "二", "三", "四", "五", "六"];
 const hoursBetween = (start: string, end: string, breakMinutes: number) => {
   const [sh, sm] = start.split(":").map(Number); const [eh, em] = end.split(":").map(Number);
@@ -57,11 +60,19 @@ const shiftsOverlap = (left: Pick<Shift, "date" | "start" | "end">, right: Pick<
 };
 const regularHoursFor = (job: Job) => Math.max(0, job.regularHours ?? 8);
 const tierOneHoursFor = (job: Job) => Math.max(0, job.tierOneHours ?? 2);
+const payDayFor = (job: Job) => Math.min(31, Math.max(1, job.payDay ?? 5));
+const regularCutoffFor = (job: Job) => Math.min(31, Math.max(1, job.regularCutoffDay ?? 31));
+const overtimeCutoffFor = (job: Job) => Math.min(31, Math.max(1, job.overtimeCutoffDay ?? 25));
 const jobScheduleLabel = (job: Job) => {
   const start = job.defaultStart ?? "09:00";
   const end = job.defaultEnd ?? "17:00";
   const breakMinutes = job.defaultBreakMinutes ?? 0;
   return `${start}–${end} · ${hoursBetween(start, end, breakMinutes).toFixed(1)} 小時`;
+};
+const defaultHourSplit = (job: Job, start: string, end: string, breakMinutes: number) => {
+  const hours = hoursBetween(start, end, breakMinutes);
+  const regularHours = Math.min(hours, regularHoursFor(job));
+  return { regularHours, overtimeHours: Math.max(0, hours - regularHours) };
 };
 const loadData = (): SavedData => {
   try { const value = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "null") as Partial<SavedData> | null; if (value?.version === 1 && Array.isArray(value.jobs) && Array.isArray(value.shifts)) return value as SavedData; } catch { /* start empty */ }
@@ -86,8 +97,8 @@ export default function App() {
   const [editingShift, setEditingShift] = useState<string | null>(null);
   const [resumeShiftAfterJob, setResumeShiftAfterJob] = useState(false);
   const importRef = useRef<HTMLInputElement>(null);
-  const [jobForm, setJobForm] = useState({ name: "", wage: 0, regularHours: 8, tierOneHours: 2, tierOne: 1.34, tierTwo: 1.67, color: COLORS[0], defaultStart: "09:00", defaultEnd: "17:00", defaultBreakMinutes: 0 });
-  const [shiftForm, setShiftForm] = useState({ date: dateKey(), jobId: "", start: "09:00", end: "17:00", breakMinutes: 0, fatigue: 3, note: "", repeatMode: "none" as RepeatMode, repeatUntil: monthEnd(dateKey()), repeatWeekdays: [new Date().getDay()], repeatEveryDays: 7 });
+  const [jobForm, setJobForm] = useState({ name: "", wage: 0, regularHours: 8, tierOneHours: 2, tierOne: 1.34, tierTwo: 1.67, color: COLORS[0], defaultStart: "09:00", defaultEnd: "17:00", defaultBreakMinutes: 0, payDay: 5, regularCutoffDay: 31, overtimeCutoffDay: 25 });
+  const [shiftForm, setShiftForm] = useState({ date: dateKey(), jobId: "", start: "09:00", end: "17:00", breakMinutes: 0, regularHours: 8, overtimeHours: 0, fatigue: 3, note: "", repeatMode: "none" as RepeatMode, repeatUntil: monthEnd(dateKey()), repeatWeekdays: [new Date().getDay()], repeatEveryDays: 7 });
 
   useEffect(() => localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: 1, jobs, shifts } satisfies SavedData)), [jobs, shifts]);
   useEffect(() => { if (!notice) return; const timer = setTimeout(() => setNotice(""), 3500); return () => clearTimeout(timer); }, [notice]);
@@ -97,20 +108,34 @@ export default function App() {
     const hours = hoursBetween(shift.start, shift.end, shift.breakMinutes);
     const regularLimit = regularHoursFor(job);
     const tierOneLimit = tierOneHoursFor(job);
-    const regular = Math.min(hours, regularLimit);
-    const overtimeOne = Math.min(Math.max(hours - regularLimit, 0), tierOneLimit);
-    const overtimeTwo = Math.max(hours - regularLimit - tierOneLimit, 0);
+    const regular = shift.regularHours ?? Math.min(hours, regularLimit);
+    const overtime = shift.overtimeHours ?? Math.max(hours - regularLimit, 0);
+    const overtimeOne = Math.min(overtime, tierOneLimit);
+    const overtimeTwo = Math.max(overtime - tierOneLimit, 0);
     const income = regular * job.wage + overtimeOne * job.wage * job.tierOne + overtimeTwo * job.wage * job.tierTwo;
     return [{ ...shift, job, hours, regular, overtimeOne, overtimeTwo, income }];
   }), [jobs, shifts]);
-  const monthly = useMemo(() => calculated.filter((shift) => shift.date.startsWith(month)), [calculated, month]);
-  const totals = useMemo(() => monthly.reduce((sum, shift) => ({
+  const calendarMonthly = useMemo(() => calculated.filter((shift) => shift.date.startsWith(month)), [calculated, month]);
+  const payroll = useMemo(() => calculated.flatMap((shift) => {
+    const regularPeriod = payPeriod(month, regularCutoffFor(shift.job));
+    const overtimePeriod = payPeriod(month, overtimeCutoffFor(shift.job));
+    const regular = inPeriod(shift.date, regularPeriod) ? shift.regular : 0;
+    const overtimeOne = inPeriod(shift.date, overtimePeriod) ? shift.overtimeOne : 0;
+    const overtimeTwo = inPeriod(shift.date, overtimePeriod) ? shift.overtimeTwo : 0;
+    if (!regular && !overtimeOne && !overtimeTwo) return [];
+    const regularPay = regular * shift.job.wage;
+    const overtimeOnePay = overtimeOne * shift.job.wage * shift.job.tierOne;
+    const overtimeTwoPay = overtimeTwo * shift.job.wage * shift.job.tierTwo;
+    return [{ ...shift, regular, overtimeOne, overtimeTwo, hours: regular + overtimeOne + overtimeTwo, income: regularPay + overtimeOnePay + overtimeTwoPay }];
+  }), [calculated, month]);
+  const totals = useMemo(() => payroll.reduce((sum, shift) => ({
     income: sum.income + shift.income, hours: sum.hours + shift.hours,
     regular: sum.regular + shift.regular, regularPay: sum.regularPay + shift.regular * shift.job.wage,
     overtimeOne: sum.overtimeOne + shift.overtimeOne, overtimeOnePay: sum.overtimeOnePay + shift.overtimeOne * shift.job.wage * shift.job.tierOne,
     overtimeTwo: sum.overtimeTwo + shift.overtimeTwo, overtimeTwoPay: sum.overtimeTwoPay + shift.overtimeTwo * shift.job.wage * shift.job.tierTwo,
-  }), { income: 0, hours: 0, regular: 0, regularPay: 0, overtimeOne: 0, overtimeOnePay: 0, overtimeTwo: 0, overtimeTwoPay: 0 }), [monthly]);
-  const jobTotals = jobs.map((job) => ({ ...job, value: monthly.filter((s) => s.jobId === job.id).reduce((sum, s) => sum + s.income, 0) })).filter((job) => job.value > 0);
+  }), { income: 0, hours: 0, regular: 0, regularPay: 0, overtimeOne: 0, overtimeOnePay: 0, overtimeTwo: 0, overtimeTwoPay: 0 }), [payroll]);
+  const jobTotals = jobs.map((job) => ({ ...job, value: payroll.filter((s) => s.jobId === job.id).reduce((sum, s) => sum + s.income, 0) })).filter((job) => job.value > 0);
+  const payrollShiftCount = new Set(payroll.map((shift) => shift.id)).size;
   const selectedDayShifts = selectedDate
     ? calculated.filter((shift) => shift.date === selectedDate).sort((a, b) => a.start.localeCompare(b.start))
     : [];
@@ -123,7 +148,7 @@ export default function App() {
 
   const openJob = (job?: Job, returnToShift = false) => {
     setEditingJob(job?.id ?? null);
-    setJobForm(job ? { name: job.name, wage: job.wage, regularHours: regularHoursFor(job), tierOneHours: tierOneHoursFor(job), tierOne: job.tierOne, tierTwo: job.tierTwo, color: job.color, defaultStart: job.defaultStart ?? "09:00", defaultEnd: job.defaultEnd ?? "17:00", defaultBreakMinutes: job.defaultBreakMinutes ?? 0 } : { name: "", wage: 0, regularHours: 8, tierOneHours: 2, tierOne: 1.34, tierTwo: 1.67, color: COLORS[jobs.length % COLORS.length], defaultStart: "09:00", defaultEnd: "17:00", defaultBreakMinutes: 0 });
+    setJobForm(job ? { name: job.name, wage: job.wage, regularHours: regularHoursFor(job), tierOneHours: tierOneHoursFor(job), tierOne: job.tierOne, tierTwo: job.tierTwo, color: job.color, defaultStart: job.defaultStart ?? "09:00", defaultEnd: job.defaultEnd ?? "17:00", defaultBreakMinutes: job.defaultBreakMinutes ?? 0, payDay: payDayFor(job), regularCutoffDay: regularCutoffFor(job), overtimeCutoffDay: overtimeCutoffFor(job) } : { name: "", wage: 0, regularHours: 8, tierOneHours: 2, tierOne: 1.34, tierTwo: 1.67, color: COLORS[jobs.length % COLORS.length], defaultStart: "09:00", defaultEnd: "17:00", defaultBreakMinutes: 0, payDay: 5, regularCutoffDay: 31, overtimeCutoffDay: 25 });
     setResumeShiftAfterJob(returnToShift);
     if (returnToShift) setShiftModal(false);
     setJobModal(true);
@@ -136,13 +161,24 @@ export default function App() {
   const openShift = (date = dateKey(), shift?: Shift) => {
     if (!jobs.length) { setNotice("請先新增一份工作，再記錄班次。"); openJob(undefined, true); return; }
     const defaultJob = jobs.find((job) => job.id === shift?.jobId) ?? jobs[0];
+    const start = shift?.start ?? defaultJob.defaultStart ?? "09:00";
+    const end = shift?.end ?? defaultJob.defaultEnd ?? "17:00";
+    const breakMinutes = shift?.breakMinutes ?? defaultJob.defaultBreakMinutes ?? 0;
+    const split = shift && (shift.regularHours !== undefined || shift.overtimeHours !== undefined)
+      ? { regularHours: shift.regularHours ?? 0, overtimeHours: shift.overtimeHours ?? 0 }
+      : defaultHourSplit(defaultJob, start, end, breakMinutes);
     setEditingShift(shift?.id ?? null);
-    setShiftForm(shift ? { date: shift.date, jobId: shift.jobId, start: shift.start, end: shift.end, breakMinutes: shift.breakMinutes, fatigue: shift.fatigue, note: shift.note, repeatMode: "none" as RepeatMode, repeatUntil: shift.date, repeatWeekdays: [new Date(`${shift.date}T12:00:00`).getDay()], repeatEveryDays: 7 } : { date, jobId: defaultJob.id, start: defaultJob.defaultStart ?? "09:00", end: defaultJob.defaultEnd ?? "17:00", breakMinutes: defaultJob.defaultBreakMinutes ?? 0, fatigue: 3, note: "", repeatMode: "none" as RepeatMode, repeatUntil: monthEnd(date), repeatWeekdays: [new Date(`${date}T12:00:00`).getDay()], repeatEveryDays: 7 });
+    setShiftForm({ date: shift?.date ?? date, jobId: shift?.jobId ?? defaultJob.id, start, end, breakMinutes, ...split, fatigue: shift?.fatigue ?? 3, note: shift?.note ?? "", repeatMode: "none" as RepeatMode, repeatUntil: shift?.date ?? monthEnd(date), repeatWeekdays: [new Date(`${shift?.date ?? date}T12:00:00`).getDay()], repeatEveryDays: 7 });
     setShiftModal(true);
   };
   const selectShiftJob = (jobId: string) => {
     const job = jobs.find((item) => item.id === jobId);
-    setShiftForm((form) => ({ ...form, jobId, start: job?.defaultStart ?? form.start, end: job?.defaultEnd ?? form.end, breakMinutes: job?.defaultBreakMinutes ?? form.breakMinutes }));
+    setShiftForm((form) => {
+      const start = job?.defaultStart ?? form.start;
+      const end = job?.defaultEnd ?? form.end;
+      const breakMinutes = job?.defaultBreakMinutes ?? form.breakMinutes;
+      return { ...form, jobId, start, end, breakMinutes, ...(job ? defaultHourSplit(job, start, end, breakMinutes) : {}) };
+    });
   };
   const setRepeatMode = (repeatMode: RepeatMode) => {
     const weekday = new Date(`${shiftForm.date}T12:00:00`).getDay();
@@ -159,6 +195,7 @@ export default function App() {
     event.preventDefault(); const name = jobForm.name.trim();
     if (!name || jobForm.wage <= 0) { setNotice("請填寫工作名稱與正確時薪。"); return; }
     if (jobForm.regularHours < 0 || jobForm.tierOneHours < 0 || jobForm.tierOne < 1 || jobForm.tierTwo < 1) { setNotice("請填寫正確的工時與加班倍率。"); return; }
+    if ([jobForm.payDay, jobForm.regularCutoffDay, jobForm.overtimeCutoffDay].some((day) => day < 1 || day > 31)) { setNotice("發薪日與結算日請填 1～31。"); return; }
     const defaultStart = normalizeTime(jobForm.defaultStart);
     const defaultEnd = normalizeTime(jobForm.defaultEnd);
     if (!defaultStart || !defaultEnd) { setNotice("請填寫有效的預設工作時間。"); return; }
@@ -183,6 +220,9 @@ export default function App() {
     const start = normalizeTime(shiftForm.start);
     const end = normalizeTime(shiftForm.end);
     if (!start || !end) { setNotice("請輸入有效的 24 小時制時間，例如 20:00。"); return; }
+    const totalHours = hoursBetween(start, end, Math.max(0, shiftForm.breakMinutes));
+    if (shiftForm.regularHours < 0 || shiftForm.overtimeHours < 0) { setNotice("正常與加班時數不能小於 0。"); return; }
+    if (Math.abs(shiftForm.regularHours + shiftForm.overtimeHours - totalHours) > 0.01) { setNotice(`正常與加班時數合計需為 ${totalHours.toFixed(1)} 小時。`); return; }
     setShiftForm((form) => ({ ...form, start, end }));
     if (!editingShift && shiftForm.repeatMode !== "none" && shiftForm.repeatUntil < shiftForm.date) { setNotice("重複結束日期不能早於開始日期。"); return; }
     if (!editingShift && shiftForm.repeatMode === "weekly" && !shiftForm.repeatWeekdays.length) { setNotice("請至少選擇一個星期幾。"); return; }
@@ -203,7 +243,7 @@ export default function App() {
         cursorDate = addDays(cursorDate, interval);
       }
     }
-    const candidates: Shift[] = dates.map((date, index) => ({ id: editingShift ?? `${makeId()}-${index}`, date, jobId: shiftForm.jobId, start, end, breakMinutes: Math.max(0, shiftForm.breakMinutes), fatigue: shiftForm.fatigue, note: shiftForm.note }));
+    const candidates: Shift[] = dates.map((date, index) => ({ id: editingShift ?? `${makeId()}-${index}`, date, jobId: shiftForm.jobId, start, end, breakMinutes: Math.max(0, shiftForm.breakMinutes), regularHours: shiftForm.regularHours, overtimeHours: shiftForm.overtimeHours, fatigue: shiftForm.fatigue, note: shiftForm.note }));
     const newCandidates = candidates.filter((candidate) => !shifts.some((shift) => shift.id !== editingShift && shift.jobId === candidate.jobId && shift.date === candidate.date && shift.start === candidate.start && shift.end === candidate.end));
     const duplicateCount = candidates.length - newCandidates.length;
     if (!newCandidates.length) { setNotice("這些班次都已存在，沒有重複新增。"); return; }
@@ -249,15 +289,15 @@ export default function App() {
       <div className="grid lg:grid-cols-[190px_1fr] lg:gap-10">
         <nav className="flex gap-2 overflow-x-auto py-5 lg:flex-col lg:pt-10" aria-label="主要功能">
           {[["home", "▣", "總覽"], ["calendar", "□", "月曆"], ["jobs", "♢", "我的工作"]].map(([id, icon, label]) => <button key={id} onClick={() => setPage(id as Page)} className={`nav-button ${page === id ? "active" : ""}`}><span>{icon}</span>{label}</button>)}
-          <div className="hidden border-t border-[#DDCED5] pt-6 lg:block"><small className="eyebrow text-[#52625a]">{monthLabel(month)}</small><p className="mt-2 font-display text-2xl font-bold">{monthly.length} 個班次</p><p className="font-mono text-xs text-[#52625a]">{totals.hours.toFixed(1)} 小時</p></div>
+          <div className="hidden border-t border-[#DDCED5] pt-6 lg:block"><small className="eyebrow text-[#52625a]">{page === "calendar" ? monthLabel(month) : `${monthLabel(month)}發薪`}</small><p className="mt-2 font-display text-2xl font-bold">{page === "calendar" ? calendarMonthly.length : payrollShiftCount} 個班次</p><p className="font-mono text-xs text-[#52625a]">{(page === "calendar" ? calendarMonthly.reduce((sum, shift) => sum + shift.hours, 0) : totals.hours).toFixed(1)} 小時</p></div>
         </nav>
 
         {page === "home" && <section className="page-section">
-          <div className="section-heading"><div><small className="eyebrow text-[#A6655F]">收入總覽 / {monthLabel(month)}</small><h2>每一分鐘，都值得計算。</h2></div><MonthPicker value={month} onChange={setMonth} /></div>
+          <div className="section-heading"><div><small className="eyebrow text-[#A6655F]">發薪總覽 / {monthLabel(month)}</small><h2>這次會領多少？</h2></div><div><small className="picker-label">選擇發薪月份</small><MonthPicker value={month} onChange={setMonth} /></div></div>
           {!jobs.length ? <Empty title="先建立你的第一份工作" text="填入工作名稱、時薪與加班倍率，接著就能記錄真實班次。這裡不會放入任何示範資料。" action="+ 新增工作" onClick={() => openJob()} /> : <>
             <div className="grid gap-4 xl:grid-cols-[1.1fr_.9fr]">
-              <article className="income-card"><small className="eyebrow text-[#282C34]">本月總收入</small><p className="mt-5 font-display text-5xl font-bold tracking-[-.06em] sm:text-6xl">{money(totals.income)}</p><div className="income-stats"><span><b>{totals.hours.toFixed(1)}</b>小時</span><span><b>{monthly.length}</b>班次</span><span><b>{money(monthly.length ? totals.income / monthly.length : 0)}</b>平均每班</span></div></article>
-              <article className="paper-card"><small className="eyebrow text-[#52625a]">工作收入占比</small><p className="mt-1 text-sm text-[#52625a]">依這個月的實際班次計算。</p><div className="mt-7 flex items-center gap-6"><div className="donut" style={{ background: `conic-gradient(${donut})` }}><span>{jobTotals.length}<br />工作</span></div><div className="min-w-0 flex-1 space-y-3">{!jobTotals.length && <p className="text-sm text-[#52625a]">本月還沒有班次。</p>}{jobTotals.map((job, index) => <div key={job.id} className="flex gap-2 font-mono text-[11px]"><i style={{ background: CHART_COLORS[index % CHART_COLORS.length] }} /><span className="flex-1 truncate">{job.name}</span><b>{Math.round(job.value / totals.income * 100)}%</b></div>)}</div></div></article>
+              <article className="income-card"><small className="eyebrow text-[#282C34]">預計發薪總額</small><p className="mt-5 font-display text-5xl font-bold tracking-[-.06em] sm:text-6xl">{money(totals.income)}</p><div className="income-stats"><span><b>{totals.hours.toFixed(1)}</b>計薪小時</span><span><b>{payrollShiftCount}</b>相關班次</span><span><b>{money(payrollShiftCount ? totals.income / payrollShiftCount : 0)}</b>平均每班</span></div></article>
+              <article className="paper-card"><small className="eyebrow text-[#52625a]">本次薪資涵蓋範圍</small><div className="pay-period-list">{jobs.map((job) => { const regular = payPeriod(month, regularCutoffFor(job)); const overtime = payPeriod(month, overtimeCutoffFor(job)); return <div key={job.id}><strong>{job.name} · {dateAtDay(month, payDayFor(job)).slice(5).replace("-", "/")} 發薪</strong><p>正常 {regular.start.slice(5).replace("-", "/")}～{regular.end.slice(5).replace("-", "/")}<br />加班 {overtime.start.slice(5).replace("-", "/")}～{overtime.end.slice(5).replace("-", "/")}</p></div>; })}</div></article>
             </div>
             <div className="mt-8 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{[["全部工時", totals.hours, totals.income, "#B4C1D0", "#282C34"], ["一般工時", totals.regular, totals.regularPay, "#BDCDBA", "#282C34"], ["加班第一階段", totals.overtimeOne, totals.overtimeOnePay, "#DDCED5", "#282C34"], ["加班第二階段", totals.overtimeTwo, totals.overtimeTwoPay, "#DFC1C6", "#282C34"]].map(([label, hours, pay, bg, color]) => <article key={String(label)} className="summary-card" style={{ background: String(bg), color: String(color) }}><small className="eyebrow">{label}</small><p className="mt-5 font-display text-3xl font-bold">{Number(hours).toFixed(1)} h</p><p className="font-mono text-xs">{money(Number(pay))}</p></article>)}</div>
           </>}
@@ -265,12 +305,12 @@ export default function App() {
 
         {page === "calendar" && <section className="page-section">
           <div className="section-heading"><div><small className="eyebrow text-[#A6655F]">每個班次，一眼掌握</small><h2>{monthLabel(month)}</h2></div><MonthPicker value={month} onChange={(value) => { setMonth(value); setSelectedDate(null); }} /></div>
-          <div className="calendar"><div className="calendar-head">{"一 二 三 四 五 六 日".split(" ").map((day) => <span key={day}>{day}</span>)}</div><div className="calendar-grid">{Array.from({ length: offset }).map((_, index) => <i key={`e${index}`} />)}{Array.from({ length: dayCount }, (_, index) => index + 1).map((day) => { const date = `${month}-${String(day).padStart(2, "0")}`; const records = monthly.filter((s) => s.date === date); return <button key={day} className={date === selectedDate ? "selected" : ""} aria-pressed={date === selectedDate} onClick={() => setSelectedDate(date)}><b className={date === dateKey() ? "today" : ""}>{day}</b>{records.length > 0 && <><span className="dots">{records.slice(0, 3).map((s) => <i key={s.id} style={{ background: s.job.color }} />)}</span><small>{money(records.reduce((sum, s) => sum + s.income, 0))}</small></>}</button>; })}</div></div>
+          <div className="calendar"><div className="calendar-head">{"一 二 三 四 五 六 日".split(" ").map((day) => <span key={day}>{day}</span>)}</div><div className="calendar-grid">{Array.from({ length: offset }).map((_, index) => <i key={`e${index}`} />)}{Array.from({ length: dayCount }, (_, index) => index + 1).map((day) => { const date = `${month}-${String(day).padStart(2, "0")}`; const records = calendarMonthly.filter((s) => s.date === date); return <button key={day} className={date === selectedDate ? "selected" : ""} aria-pressed={date === selectedDate} onClick={() => setSelectedDate(date)}><b className={date === dateKey() ? "today" : ""}>{day}</b>{records.length > 0 && <><span className="dots">{records.slice(0, 3).map((s) => <i key={s.id} style={{ background: s.job.color }} />)}</span><small>正 {records.reduce((sum, s) => sum + s.regular, 0).toFixed(1)}h<br />加 {records.reduce((sum, s) => sum + s.overtimeOne + s.overtimeTwo, 0).toFixed(1)}h</small></>}</button>; })}</div></div>
         </section>}
 
         {page === "jobs" && <section className="page-section">
           <div className="section-heading"><div><small className="eyebrow text-[#A6655F]">設定你的實際費率</small><h2>我的工作</h2></div><button onClick={() => openJob()} className="dark-pill">+ 新增工作</button></div>
-          <div className="space-y-3">{!jobs.length && <Empty compact title="尚未建立工作" text="新增後即可開始記錄班次。" />}{jobs.map((job) => <article key={job.id} className="job-row"><i style={{ background: job.color }} /><div><h3>{job.name}</h3><p>{shifts.filter((shift) => shift.jobId === job.id).length} 筆班次紀錄 · 預設 {jobScheduleLabel(job)} · 一般 {regularHoursFor(job)} 小時</p></div><span><small>基本時薪</small><b>{money(job.wage)}</b></span><span><small>加班設定</small><b>前 {tierOneHoursFor(job)}h ×{job.tierOne} / 後續 ×{job.tierTwo}</b></span><div><button onClick={() => openJob(job)}>編輯</button><button className="danger" onClick={() => removeJob(job)}>刪除</button></div></article>)}</div>
+          <div className="space-y-3">{!jobs.length && <Empty compact title="尚未建立工作" text="新增後即可開始記錄班次。" />}{jobs.map((job) => <article key={job.id} className="job-row"><i style={{ background: job.color }} /><div><h3>{job.name}</h3><p>{shifts.filter((shift) => shift.jobId === job.id).length} 筆班次 · 每月 {payDayFor(job)} 日發薪 · 正常 {regularCutoffFor(job)} 日結／加班 {overtimeCutoffFor(job)} 日結</p></div><span><small>基本時薪</small><b>{money(job.wage)}</b></span><span><small>加班設定</small><b>前 {tierOneHoursFor(job)}h ×{job.tierOne} / 後續 ×{job.tierTwo}</b></span><div><button onClick={() => openJob(job)}>編輯</button><button className="danger" onClick={() => removeJob(job)}>刪除</button></div></article>)}</div>
           <div className="backup-card"><div><h3>備份此裝置的資料</h3><p>匯出 JSON 後可在其他瀏覽器或裝置重新匯入。</p></div><div><input ref={importRef} type="file" accept=".json,application/json" hidden onChange={(event) => event.target.files?.[0] && importData(event.target.files[0])} /><button onClick={() => importRef.current?.click()} className="secondary-pill">↑ 匯入</button><button onClick={exportData} className="yellow-pill">↓ 匯出</button></div></div>
         </section>}
       </div>
@@ -281,11 +321,16 @@ export default function App() {
     {jobModal && <Modal title={editingJob ? "編輯工作" : "新增工作"} onClose={closeJobModal}><form onSubmit={saveJob} className="form-grid">
       <Field label="工作名稱"><input autoFocus value={jobForm.name} onChange={(e) => setJobForm({ ...jobForm, name: e.target.value })} placeholder="例如：咖啡店晚班" /></Field>
       <Field label="基本時薪（新台幣）"><input type="number" min="1" value={jobForm.wage || ""} onChange={(e) => setJobForm({ ...jobForm, wage: Number(e.target.value) })} /></Field>
-      <div className="schedule-defaults"><strong>工時與加班倍率</strong><p>每筆班次會依當天總工時自動拆分，不需要另外建立加班班次。</p>
+      <div className="schedule-defaults"><strong>工時與加班倍率</strong><p>每筆班次會先自動拆分，也可以在日曆中依實際情況調整。</p>
         <Field label="一般工時上限（小時）"><input type="number" min="0" step="0.5" value={jobForm.regularHours} onChange={(e) => setJobForm({ ...jobForm, regularHours: Number(e.target.value) })} /></Field>
         <div className="grid grid-cols-2 gap-3"><Field label="加班前段時數"><input type="number" min="0" step="0.5" value={jobForm.tierOneHours} onChange={(e) => setJobForm({ ...jobForm, tierOneHours: Number(e.target.value) })} /></Field><Field label="前段倍率"><input type="number" min="1" step="0.01" value={jobForm.tierOne} onChange={(e) => setJobForm({ ...jobForm, tierOne: Number(e.target.value) })} /></Field></div>
         <Field label="超過前段時數後的倍率"><input type="number" min="1" step="0.01" value={jobForm.tierTwo} onChange={(e) => setJobForm({ ...jobForm, tierTwo: Number(e.target.value) })} /></Field>
         <small>計算方式：前 {jobForm.regularHours || 0} 小時為一般工時，接著 {jobForm.tierOneHours || 0} 小時 ×{jobForm.tierOne || 0}，之後 ×{jobForm.tierTwo || 0}。</small>
+      </div>
+      <div className="schedule-defaults"><strong>發薪與結算週期</strong><p>總覽會依發薪月份，分別抓取正常與加班時數。</p>
+        <Field label="每月發薪日"><input type="number" min="1" max="31" value={jobForm.payDay} onChange={(e) => setJobForm({ ...jobForm, payDay: Number(e.target.value) })} /></Field>
+        <div className="grid grid-cols-2 gap-3"><Field label="正常工時結算日"><input type="number" min="1" max="31" value={jobForm.regularCutoffDay} onChange={(e) => setJobForm({ ...jobForm, regularCutoffDay: Number(e.target.value) })} /></Field><Field label="加班工時結算日"><input type="number" min="1" max="31" value={jobForm.overtimeCutoffDay} onChange={(e) => setJobForm({ ...jobForm, overtimeCutoffDay: Number(e.target.value) })} /></Field></div>
+        <small>範例：正常填 31、加班填 25，7 月發薪即計入正常 7/1～7/31、加班 6/26～7/25；不足 31 日的月份會自動取月底。</small>
       </div>
       <div className="schedule-defaults"><strong>預設工作時間</strong><p>新增這份工作的班次時會自動帶入，之後仍可個別修改。</p>
         <div className="grid grid-cols-2 gap-3"><Field label="預設開始"><input type="text" inputMode="numeric" value={jobForm.defaultStart} onChange={(e) => setJobForm({ ...jobForm, defaultStart: e.target.value })} onBlur={() => { const value = normalizeTime(jobForm.defaultStart); if (value) setJobForm((form) => ({ ...form, defaultStart: value })); }} /></Field><Field label="預設結束"><input type="text" inputMode="numeric" value={jobForm.defaultEnd} onChange={(e) => setJobForm({ ...jobForm, defaultEnd: e.target.value })} onBlur={() => { const value = normalizeTime(jobForm.defaultEnd); if (value) setJobForm((form) => ({ ...form, defaultEnd: value })); }} /></Field></div>
@@ -302,8 +347,10 @@ export default function App() {
         {shiftForm.repeatMode !== "none" && <Field label="重複至"><input type="date" min={shiftForm.date} value={shiftForm.repeatUntil} onChange={(e) => setShiftForm({ ...shiftForm, repeatUntil: e.target.value })} /></Field>}
       </div>}
       <Field label="工作"><div className="work-picker"><select value={shiftForm.jobId} onChange={(e) => selectShiftJob(e.target.value)}>{jobs.map((job) => <option key={job.id} value={job.id}>{job.name}（{jobScheduleLabel(job)}）</option>)}</select><button type="button" onClick={() => openJob(undefined, true)}>+ 新增工作</button></div></Field>
-      <div className="grid grid-cols-2 gap-3"><Field label="開始時間"><input type="text" inputMode="numeric" maxLength={5} autoComplete="off" value={shiftForm.start} onChange={(e) => setShiftForm((form) => ({ ...form, start: e.target.value }))} onBlur={() => { const value = normalizeTime(shiftForm.start); if (value) setShiftForm((form) => ({ ...form, start: value })); }} /></Field><Field label="結束時間"><input type="text" inputMode="numeric" maxLength={5} autoComplete="off" value={shiftForm.end} onChange={(e) => setShiftForm((form) => ({ ...form, end: e.target.value }))} onBlur={() => { const value = normalizeTime(shiftForm.end); if (value) setShiftForm((form) => ({ ...form, end: value })); }} /></Field></div><small className="time-hint">已套用工作的預設時間；系統會依總工時自動拆分一般工時與兩段加班。</small>
-      <Field label="休息分鐘數"><input type="number" min="0" step="5" value={shiftForm.breakMinutes} onChange={(e) => setShiftForm({ ...shiftForm, breakMinutes: Number(e.target.value) })} /></Field><Field label="疲勞程度"><div className="fatigue">{[1, 2, 3, 4, 5].map((level) => <button type="button" key={level} onClick={() => setShiftForm({ ...shiftForm, fatigue: level })} className={shiftForm.fatigue >= level ? "active" : ""} aria-label={`疲勞程度 ${level}`}>✦</button>)}</div></Field><Field label="備註（選填）"><textarea rows={3} value={shiftForm.note} onChange={(e) => setShiftForm({ ...shiftForm, note: e.target.value })} placeholder="例如：代班" /></Field><button className="form-submit">{editingShift ? "儲存班次" : shiftForm.repeatMode === "none" ? "儲存班次" : "批次新增班次"} →</button>
+      <div className="grid grid-cols-2 gap-3"><Field label="開始時間"><input type="text" inputMode="numeric" maxLength={5} autoComplete="off" value={shiftForm.start} onChange={(e) => setShiftForm((form) => ({ ...form, start: e.target.value }))} onBlur={() => { const value = normalizeTime(shiftForm.start); if (value) setShiftForm((form) => ({ ...form, start: value })); }} /></Field><Field label="結束時間"><input type="text" inputMode="numeric" maxLength={5} autoComplete="off" value={shiftForm.end} onChange={(e) => setShiftForm((form) => ({ ...form, end: e.target.value }))} onBlur={() => { const value = normalizeTime(shiftForm.end); if (value) setShiftForm((form) => ({ ...form, end: value })); }} /></Field></div>
+      <Field label="休息分鐘數"><input type="number" min="0" step="5" value={shiftForm.breakMinutes} onChange={(e) => setShiftForm({ ...shiftForm, breakMinutes: Number(e.target.value) })} /></Field>
+      <div className="hour-allocation"><div><strong>這一天如何分配？</strong><small>兩者合計需等於實際 {hoursBetween(shiftForm.start, shiftForm.end, shiftForm.breakMinutes).toFixed(1)} 小時</small></div><div className="grid grid-cols-2 gap-3"><Field label="正常工時"><input type="number" min="0" step="0.5" value={shiftForm.regularHours} onChange={(e) => setShiftForm({ ...shiftForm, regularHours: Number(e.target.value) })} /></Field><Field label="加班工時"><input type="number" min="0" step="0.5" value={shiftForm.overtimeHours} onChange={(e) => setShiftForm({ ...shiftForm, overtimeHours: Number(e.target.value) })} /></Field></div><button type="button" onClick={() => { const job = jobs.find((item) => item.id === shiftForm.jobId); if (job) setShiftForm((form) => ({ ...form, ...defaultHourSplit(job, form.start, form.end, form.breakMinutes) })); }}>依時間自動分配</button></div>
+      <Field label="疲勞程度"><div className="fatigue">{[1, 2, 3, 4, 5].map((level) => <button type="button" key={level} onClick={() => setShiftForm({ ...shiftForm, fatigue: level })} className={shiftForm.fatigue >= level ? "active" : ""} aria-label={`疲勞程度 ${level}`}>✦</button>)}</div></Field><Field label="備註（選填）"><textarea rows={3} value={shiftForm.note} onChange={(e) => setShiftForm({ ...shiftForm, note: e.target.value })} placeholder="例如：代班" /></Field><button className="form-submit">{editingShift ? "儲存班次" : shiftForm.repeatMode === "none" ? "儲存班次" : "批次新增班次"} →</button>
     </form></Modal>}
   </main>;
 }
