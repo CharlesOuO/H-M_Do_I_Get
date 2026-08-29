@@ -44,10 +44,6 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .donut { display: grid; width: 8rem; height: 8rem; flex-shrink: 0; place-items: center; border-radius: 999px; }
 .donut span { display: grid; width: 5rem; height: 5rem; place-items: center; border-radius: 999px; background: var(--paper); text-align: center; font: 700 10px/1.25 "DM Mono", monospace; }
 .paper-card i { width: .625rem; height: .625rem; flex-shrink: 0; border-radius: 999px; }
-.pay-period-list { display: grid; gap: .7rem; margin-top: 1rem; }
-.pay-period-list > div { border-left: 4px solid var(--sage); border-radius: .5rem; background: #fff8; padding: .65rem .8rem; }
-.pay-period-list strong { font: 700 12px "DM Mono", monospace; }
-.pay-period-list p { margin-top: .25rem; color: var(--muted); font: 400 11px/1.55 "DM Mono", monospace; }
 .summary-card { border: 1px solid var(--mauve); border-radius: 1rem; padding: 1.25rem; }
 .empty { display: grid; min-height: 20rem; place-items: center; border: 2px dashed var(--blue); border-radius: 28px; background: var(--paper); padding: 2rem; text-align: center; }
 .empty.compact { min-height: 0; border-radius: 1rem; padding: 2rem; }
